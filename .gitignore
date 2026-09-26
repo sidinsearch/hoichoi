@@ -3,6 +3,10 @@ resources/*.mp4
 resources/*.wav
 resources/*.mp3
 resources/*.m4a
+test_assets/*.mp4
+# but DO keep the sample brands.json used by the demo
+!resources/brands.json
+!resources/.gitkeep
 data/jobs/*
 !data/jobs/.gitkeep
 
