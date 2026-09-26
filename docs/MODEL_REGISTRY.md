@@ -1,44 +1,62 @@
-# Model registry — what we use, why, and how to swap
+# Model registry — current hosted providers and local fallbacks
 
-> All choices are **CPU-first**. No GPU is assumed anywhere.
+> Verified against the provider APIs and first-party model pages on 2026-09-26.
+> All hard safety decisions remain deterministic Python.
 
-| Layer       | Default (override via env)                                                       | Why                                                                                                           | Swap if…                                                              |
-| ----------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| ASR (bn)    | `faster-whisper base` int8 (`WHISPER_MODEL`, `WHISPER_COMPUTE_TYPE`)              | `faster-whisper` runs Whisper via CTranslate2 — 4-5x faster than OpenAI Whisper. Bengali is `language="bn"`. | You have ≥ 16 GB RAM and 1 h+ of analysis time → bump to `small`.     |
-| Embeddings  | `sentence-transformers/all-MiniLM-L6-v2` (`EMBEDDING_MODEL`)                       | 80 MB, 384-dim, 22 M params — most-used compact ST model.                                                     | Bengali-native semantics → `shihab17/bangla-sentence-transformer`.    |
-| VLM         | `HuggingFaceTB/SmolVLM-Instruct` (256 M) (`HF_MODEL_VLM`)                         | Smallest credible VLM that accepts JSON-instruction prompts and runs in <2 GB on CPU.                        | You need richer descriptions → `vikhyatk/moondream2` (1.8 B).         |
-| LLM rerank  | `google/flan-t5-small` (60 M) (`USE_LLM=1`, `HF_MODEL_LLM`)                       | Only an *optional* reranker for close brand candidates — **never** used for hard constraints.               | …you're sure you don't want it → leave `USE_LLM=0` (default).         |
-| Shots       | PySceneDetect `ContentDetector`                                                    | Industry standard for fast content-aware cuts.                                                                | …you have transnetv2 weights → swap for `scenedetect`'s TransNetV2.   |
-| Vision feats| OpenCV headless + Pillow                                                           | Zero extra deps, frame extraction only.                                                                       | n/a                                                                    |
+| Layer | Production default | Fallback | Why |
+| --- | --- | --- | --- |
+| Bengali ASR | Groq `whisper-large-v3-turbo` | Gemini `gemini-3.5-transcribe`; local `faster-whisper tiny` only with `ALLOW_LOCAL_ASR=true` | Groq is the fast hosted Whisper path; Gemini is a current audio transcription model. |
+| Vision | Gemini `gemini-2.5-flash-lite` | Gemini `gemini-3.1-flash-lite` or opt-in HF VLM | Current lightweight multimodal model; receives only bounded scene windows. |
+| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` | `shihab17/bangla-sentence-transformer` | Small CPU-local model used for brand ranking. |
+| Shot detection | PySceneDetect `ContentDetector` | TransNetV2 if weights are deliberately added | Fast local cut detection. |
 
-## How these were chosen (research trail)
+## Current provider model IDs
 
-- **faster-whisper base int8**: Confirmed by the official `faster-whisper` README and
-  Community benchmarks (CTranslate2 quantization gives the lowest memory ceiling while
-  retaining Word Error Rate close to fp16).
-- **SmolVLM-Instruct**: HF blog "Vision Language Models (Better, faster, stronger)" and
-  the dedicated SmolVLM card recommend it as the best sub-2 B VLM for inference on
-  consumer hardware.
-- **shihab17/bangla-sentence-transformer**: Uddin et al., "Bangla SBERT – Sentence
-  Embedding Using Multilingual Knowledge Distillation" (UEMCON 2024). Distilled from
-  XLM-R, ~278 MB.
-- **flan-t5-small**: A pure seq-to-seq model — explicit, reproducible, JSON-friendly.
-  Picked deliberately to avoid the "general chat LLM" trap.
+### Groq
 
-## Hard constraints still belong in deterministic Python
+Official production IDs relevant to this project:
 
-Even with a VLM available, sentence-safety, dialogue-active, minimum-gap, max-breaks-per-hour,
-max-ad-load, and negative-context blocks remain Python-enforced. See
-[`app/backend/pipeline/breaks.py`](../app/backend/pipeline/breaks.py) and
-[`app/backend/pipeline/brands.py`](../app/backend/pipeline/brands.py).
+- `whisper-large-v3-turbo` — speech transcription; selected default.
+- `whisper-large-v3` — higher-cost Whisper alternative.
+- `llama-3.1-8b-instant` — current text model for lightweight text tasks.
+- `llama-3.3-70b-versatile` — current larger text model.
+- `openai/gpt-oss-20b` and `openai/gpt-oss-120b` — current production text models.
 
-## Tuning
+This project does not use a Groq chat model for scene decisions. The scene and ad logic remains deterministic; Groq is used for ASR only.
 
-Most users won't need to touch these. If you do:
+### Gemini
+
+The live Gemini API model listing currently exposes:
+
+- `gemini-2.5-flash-lite` — selected vision default for low-latency bounded image windows.
+- `gemini-3.1-flash-lite` — current alternative.
+- `gemini-3.5-transcribe` — selected Gemini ASR fallback.
+- `gemini-2.5-flash` — quality-oriented multimodal alternative.
+- `gemini-embedding-001` — available embedding alternative, not used because brand embeddings stay local.
+
+Do not use `gemini-2.0-flash`; the API reports it as shut down. Avoid unpinned `*-latest` aliases in production because they can change without a code commit.
+
+## Configuration
 
 ```bash
-export WHISPER_MODEL=small          # better Bengali accuracy
-export EMBEDDING_MODEL=shihab17/bangla-sentence-transformer
-export HF_MODEL_VLM=vikhyatk/moondream2
-export USE_LLM=1
+VISION_PROVIDER=gemini
+VISION_MODEL=gemini-2.5-flash-lite
+ASR_PROVIDER=groq
+ASR_MODEL=whisper-large-v3-turbo
+ASR_FALLBACK_PROVIDER=gemini
+GEMINI_ASR_MODEL=gemini-3.5-transcribe
+ALLOW_LOCAL_ASR=false
 ```
+
+Keys are read from environment variables and never stored in this document or logged.
+
+## Sources
+
+- Groq supported models: https://console.groq.com/docs/models
+- Gemini models: https://ai.google.dev/gemini-api/docs/models
+- Groq model listing endpoint: `https://api.groq.com/openai/v1/models`
+- Gemini model listing endpoint: `https://generativelanguage.googleapis.com/v1beta/models`
+
+## Hard constraints
+
+Sentence-safety, active-dialogue protection, minimum-gap, maximum breaks per hour, maximum ad load, score threshold, and negative-context blocks remain Python-enforced in `pipeline/breaks.py` and `pipeline/brands.py`. Hosted models only provide transcription or bounded visual context.

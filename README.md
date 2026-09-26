@@ -109,7 +109,7 @@ Adding a 9th brand to `brand.json` requires **zero** changes to Python or TypeSc
 | ASR (cloud alt) | Gemini multimodal ASR (`ASR_FALLBACK_PROVIDER=gemini`)             | Used if Groq is rate-limited or creds absent.                                                        |
 | ASR (local)  | `faster-whisper tiny` int8 (`ALLOW_LOCAL_ASR=true`)                  | Last-resort CPU fallback. RTF ≈ 0.23 on a 23-min episode → ~5.4 min total.                          |
 | Shots        | PySceneDetect `ContentDetector`                                       | Industry-standard content-aware cut detector. Shots are *evidence*, never final scenes.               |
-| Vision (cloud) | Google Gemini multimodal (`VISION_PROVIDER=gemini`, `VISION_MODEL=gemini-3.8-flash`) | Sends **bounded windows** (≤4 JPEGs + transcript slice), never the full video. Free tier. |
+| Vision (cloud) | Google Gemini multimodal (`VISION_PROVIDER=gemini`, `VISION_MODEL=gemini-2.5-flash-lite`) | Sends **bounded windows** (≤4 JPEGs + transcript slice), never the full video. Free tier. |
 | Vision (local opt-in) | Florence-2 / Moondream2 / SmolVLM (`VISION_PROVIDER=hf`)     | Opt-in. Off by default — defeats the budget otherwise.                                              |
 | Embeddings   | `sentence-transformers/all-MiniLM-L6-v2`                             | 80 MB, 384-dim. Tiny CPU cost; used only for brand-context ranking.                                  |
 | LLM rerank   | `google/flan-t5-small` 60M (`USE_LLM=1`)                              | Seq-to-seq, never used for hard rules. Opt-in.                                                       |

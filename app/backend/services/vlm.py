@@ -118,7 +118,7 @@ class GeminiVisionProvider:
     """
 
     name = "gemini"
-    DEFAULT_MODEL = "gemini-3.8-flash"
+    DEFAULT_MODEL = "gemini-2.5-flash-lite"
 
     def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
         self._api_key = api_key or _api_key("GEMINI_API_KEY", "GOOGLE_API_KEY")
