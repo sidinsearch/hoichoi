@@ -21,6 +21,8 @@ import json
 import logging
 import os
 import re
+import time
+import urllib.error
 import urllib.request
 from functools import lru_cache
 from pathlib import Path
@@ -184,18 +186,25 @@ class GeminiVisionProvider:
             url, data=json.dumps(body).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
-        try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                payload = json.loads(resp.read().decode("utf-8"))
-        except Exception as exc:  # noqa: BLE001
-            log.warning("Gemini vision failed: %s", exc)
-            return ""
-        return (
-            payload.get("candidates", [{}])[0]
-            .get("content", {})
-            .get("parts", [{}])[0]
-            .get("text", "")
-        )
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(req, timeout=120) as resp:
+                    payload = json.loads(resp.read().decode("utf-8"))
+                return (
+                    payload.get("candidates", [{}])[0]
+                    .get("content", {})
+                    .get("parts", [{}])[0]
+                    .get("text", "")
+                )
+            except urllib.error.HTTPError as exc:
+                if exc.code not in {429, 500, 502, 503, 504} or attempt == 2:
+                    log.warning("Gemini vision failed with HTTP %s", exc.code)
+                    return ""
+                time.sleep(2 ** attempt)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Gemini vision failed: %s", type(exc).__name__)
+                return ""
+        return ""
 
 
 class HFVisionProvider:
