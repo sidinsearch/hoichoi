@@ -9,6 +9,8 @@ test_assets/*.mp4
 !resources/.gitkeep
 data/jobs/*
 !data/jobs/.gitkeep
+# ASR pre-decoded audio cache (rebuilt automatically)
+data/.asr_cache/
 
 # Python
 __pycache__/
