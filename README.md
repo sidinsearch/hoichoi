@@ -97,7 +97,20 @@ Adding a 9th brand to `brand.json` requires **zero** changes to Python or TypeSc
                 └───────────────────────────────┘
 ```
 
-*The VLM is **opt-in**. Default path uses pure lexical fusion of BN↔EN keywords so the pipeline stays inside the **10 min / 40-min video** budget on a CPU laptop.
+### Hybrid boundary (important for judging)
+
+This is not an API-only demo. The local pipeline does the expensive media orchestration and all decisions:
+
+1. **Local:** FFmpeg extracts audio and representative frames; PySceneDetect finds shots; local energy/VAD logic finds silence and pauses.
+2. **Hosted inference:** Groq Whisper receives only cached 5-minute audio chunks (never an oversized full-episode upload). Gemini receives at most 8 bounded scene windows, each containing ≤4 resized JPEGs plus a ≤1,000-character transcript context.
+3. **Local deterministic logic:** scene grouping, sentence/dialogue safety, emotional-climax protection, brand negative-context hard blocks, pacing, ad-load, and final timestamps remain Python code.
+4. **Outputs:** the providers return transcript/visual context only. They cannot choose or override an ad timestamp.
+
+If hosted inference is unavailable, the provider chain continues safely: Groq → configured Gemini ASR → optional local faster-whisper → empty/mock transcript; Gemini vision → optional local Hugging Face VLM (`HF_MODEL_VLM`) → neutral observation. Local fallback models are explicit opt-in so a judge can run offline without an accidental multi-GB download. No general chat LLM decides placements.
+
+Bengali is the default language (`bn`). Each web analysis form also supports auto-detection and common language hints including Hindi, English, Tamil, Telugu, Marathi, Gujarati, Kannada, Malayalam, and Urdu. The API accepts the same `language` field; `WHISPER_LANGUAGE` controls the local fallback default.
+
+*The visual provider is bounded by design. The local preprocessing and deterministic decision layers remain the core of the system.*
 
 ---
 
@@ -174,7 +187,7 @@ curl -OJ http://127.0.0.1:8000/api/jobs/<job_id>/playback
 | Var                       | Default                                  | Effect                                                              |
 | ------------------------- | ---------------------------------------- | ------------------------------------------------------------------- |
 | `WHISPER_MODEL`           | `tiny`                                   | `tiny`/`base`/`small`/`medium`                                      |
-| `WHISPER_LANGUAGE`        | `bn`                                     | ASR language (force Bengali to avoid detect-on-every-call overhead) |
+| `WHISPER_LANGUAGE`           | `bn`                                     | Default Bengali; set `auto` or a Whisper code such as `hi`/`en` for other languages |
 | `WHISPER_COMPUTE_TYPE`    | `int8`                                   | `int8`/`float16`/`float32`                                          |
 | `ASR_BACKEND`             | `faster_whisper`                         | `distil` for English-only 5-6× speedup                              |
 | `EMBEDDING_MODEL`         | `sentence-transformers/all-MiniLM-L6-v2` | Any sentence-transformers or HF model                               |

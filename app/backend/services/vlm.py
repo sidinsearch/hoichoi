@@ -296,17 +296,32 @@ def get_provider(name: str | None = None) -> VisionProvider:
     raise ValueError(f"Unknown vision provider: {chosen}")
 
 
+def _vision_fallbacks(failed: str) -> list[str]:
+    configured = os.getenv("VISION_FALLBACK_PROVIDER", "hf").strip().lower() or "hf"
+    choices = [configured]
+    if os.getenv("HF_MODEL_VLM", "").strip():
+        choices.append("hf")
+    choices.append("mock")
+    return [name for name in dict.fromkeys(choices) if name and name != failed]
+
+
 def describe_image(image_path: Path, provider_name: str | None = None) -> dict:
     try:
         provider = get_provider(provider_name)
     except RuntimeError as exc:
-        log.warning("%s — falling back to mock vision", exc)
-        provider = get_provider("mock")
-    try:
-        return provider.describe_image(image_path)
-    except Exception as exc:  # noqa: BLE001
-        log.warning("vision.describe_image failed: %s", exc)
-        return dict(_FALLBACK_CONTEXT)
+        log.warning("%s", exc)
+        provider = None
+    if provider is not None:
+        try:
+            return provider.describe_image(image_path)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("vision provider %s failed: %s", provider.name, exc)
+    for fallback in _vision_fallbacks(provider.name if provider else ""):
+        try:
+            return get_provider(fallback).describe_image(image_path)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("vision fallback %s failed: %s", fallback, exc)
+    return dict(_FALLBACK_CONTEXT)
 
 
 def describe_scene_window(
@@ -318,13 +333,19 @@ def describe_scene_window(
     try:
         provider = get_provider(provider_name)
     except RuntimeError as exc:
-        log.warning("%s — falling back to mock vision", exc)
-        provider = get_provider("mock")
-    try:
-        return provider.describe_scene_window(frames, transcript_window=transcript_window)
-    except Exception as exc:  # noqa: BLE001
-        log.warning("vision.describe_scene_window failed: %s", exc)
-        return dict(_FALLBACK_CONTEXT)
+        log.warning("%s", exc)
+        provider = None
+    if provider is not None:
+        try:
+            return provider.describe_scene_window(frames, transcript_window=transcript_window)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("vision provider %s failed: %s", provider.name, exc)
+    for fallback in _vision_fallbacks(provider.name if provider else ""):
+        try:
+            return get_provider(fallback).describe_scene_window(frames, transcript_window=transcript_window)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("vision fallback %s failed: %s", fallback, exc)
+    return dict(_FALLBACK_CONTEXT)
 
 
 def reset_for_tests() -> None:

@@ -74,7 +74,7 @@ class ProviderConfig:
     """
     # Vision
     vision_provider: str = os.getenv("VISION_PROVIDER", "").strip().lower()
-    vision_model: str = os.getenv("VISION_MODEL", "gemini-2.0-flash")
+    vision_model: str = os.getenv("VISION_MODEL", "gemini-2.5-flash-lite")
     # ASR
     asr_provider: str = os.getenv("ASR_PROVIDER", "").strip().lower()
     asr_fallback_provider: str = os.getenv("ASR_FALLBACK_PROVIDER", "mock").strip().lower()
@@ -88,7 +88,7 @@ class ProviderConfig:
 class ModelConfig:
     # ────── ASR (local fallback only) ──────
     whisper_model: str = os.getenv("WHISPER_MODEL", "tiny")
-    whisper_language: str = os.getenv("WHISPER_LANGUAGE", "bn")
+    whisper_language: str = os.getenv("WHISPER_LANGUAGE", "auto")
     whisper_device: str = os.getenv("WHISPER_DEVICE", "cpu")
     whisper_compute_type: str = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
 

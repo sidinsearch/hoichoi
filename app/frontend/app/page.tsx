@@ -8,6 +8,7 @@ import Hero from "@/components/Hero";
 import HowItWorks from "@/components/HowItWorks";
 import FeatureGrid from "@/components/FeatureGrid";
 import UploadPanel from "@/components/UploadPanel";
+import ResourcePicker from "@/components/ResourcePicker";
 import ResultsPanel from "@/components/ResultsPanel";
 import ArtifactCards from "@/components/ArtifactCards";
 import VideoPlayer from "@/components/VideoPlayer";
@@ -20,7 +21,7 @@ import type { BreakInfo } from "@/lib/playback";
 const STAGES = [
   "uploading",
   "extracting_audio",
-  "transcribing_bengali",
+  "transcribing_audio",
   "detecting_shots",
   "analyzing_visual_context",
   "building_scenes",
@@ -43,20 +44,27 @@ export default function Page() {
   const [scenes, setScenes] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [lastTriggeredBreak, setLastTriggeredBreak] = useState<BreakInfo | null>(null);
+  const [language, setLanguage] = useState("bn");
   const abortRef = useRef<AbortController | null>(null);
 
-  const analyze = async (video: File, brandJson: File) => {
-    setStatus("queued");
-    setStage("uploading");
-    setProgress(2);
-    setBreaks([]);
-    setError(null);
-    setScenes([]);
-    setVideoUrl(null);
+  const resetAnalysis = () => { setStatus("queued"); setStage("uploading"); setProgress(2); setBreaks([]); setError(null); setScenes([]); setVideoUrl(null); };
 
+  const analyzeResource = async (resourceName: string, selectedLanguage = language) => {
+    resetAnalysis();
+    const fd = new FormData();
+    fd.append("resource_name", resourceName); fd.append("brand_name", "brands.json"); fd.append("language", selectedLanguage);
+    try {
+      const r = await fetch("/api/analyze-resource", { method: "POST", body: fd });
+      if (!r.ok) throw new Error(`Resource analysis failed: ${r.status}`);
+      const { job_id } = await r.json(); setJobId(job_id); poll(job_id);
+    } catch (e: any) { setError(e?.message ?? "Resource analysis failed"); setStatus("failed"); }
+  };
+
+  const analyze = async (video: File, brandJson: File, language: string) => {
     const fd = new FormData();
     fd.append("video", video);
     fd.append("brand_json", brandJson);
+    fd.append("language", language);
 
     try {
       const r = await fetch("/api/analyze", { method: "POST", body: fd });
@@ -128,6 +136,8 @@ export default function Page() {
         { key: "scenes", label: "scenes.json", href: `/api/jobs/${jobId}/scenes` },
         { key: "debug", label: "debug.json", href: `/api/jobs/${jobId}/debug` },
         { key: "vmap", label: "vmap.xml", href: `/api/jobs/${jobId}/vmap` },
+        { key: "playback", label: "playback.json", href: `/api/jobs/${jobId}/playback` },
+        { key: "transcript", label: "transcript.json", href: `/api/jobs/${jobId}/transcript` },
       ]
     : [];
 
@@ -150,6 +160,8 @@ export default function Page() {
 
           <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
             <div className="grid gap-6">
+              <ResourcePicker onAnalyze={analyzeResource} language={language} onLanguageChange={setLanguage} disabled={isLoading} />
+              <div className="flex items-center gap-3 text-xs uppercase tracking-widest text-white/30"><span className="h-px flex-1 bg-white/10" />or upload your own<span className="h-px flex-1 bg-white/10" /></div>
               <UploadPanel onAnalyze={analyze} disabled={isLoading} loading={isLoading} />
               {jobId && (
                 <ResultsPanel

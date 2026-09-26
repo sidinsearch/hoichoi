@@ -16,6 +16,12 @@ const ICON: Record<string, JSX.Element> = {
   vmap: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h18v18H3z M3 9h18 M9 3v18"/></svg>
   ),
+  playback: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+  ),
+  transcript: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16v2H4zm0 5h16v2H4zm0 5h11v2H4z"/></svg>
+  ),
 };
 
 export default function ArtifactCards({ artifacts }: Props) {

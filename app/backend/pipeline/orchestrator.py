@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 STAGE_ORDER = [
     "uploading",
     "extracting_audio",
-    "transcribing_bengali",
+    "transcribing_audio",
     "detecting_shots",
     "analyzing_visual_context",
     "building_scenes",
@@ -65,7 +65,10 @@ def create_job(video_path: Path, brand_path: Path, job_dir: Path) -> JobStatus:
     stored_video = job_dir / video_path.name
     stored_brand = job_dir / "brands.json"
     if video_path.resolve() != stored_video.resolve():
-        stored_video.write_bytes(video_path.read_bytes())
+        # Resource-library jobs use a symlink to avoid duplicating large local media.
+        if stored_video.exists() or stored_video.is_symlink():
+            stored_video.unlink()
+        stored_video.symlink_to(video_path.resolve())
     stored_brand.write_bytes(brand_path.read_bytes())
 
     status = JobStatus(
@@ -78,7 +81,7 @@ def create_job(video_path: Path, brand_path: Path, job_dir: Path) -> JobStatus:
 
 
 def run_job(job_id: str, video_path: Path, brand_path: Path, job_dir: Path,
-            status: JobStatus) -> None:
+            status: JobStatus, language: str = "bn") -> None:
     """Run the full pipeline. Updates status.json as it goes."""
     def update(progress: float, stage: str, **extras) -> None:
         status.progress = progress
@@ -101,9 +104,9 @@ def run_job(job_id: str, video_path: Path, brand_path: Path, job_dir: Path,
         update(15.0, "extracting_audio")
         extract_audio(video_path, audio_path)
 
-        # Stage: transcribing Bengali
-        update(30.0, "transcribing_bengali")
-        audio_signals, asr_segments = audio_mod.compute_audio_signals(audio_path)
+        # Stage: language-agnostic transcription
+        update(30.0, "transcribing_audio")
+        audio_signals, asr_segments = audio_mod.compute_audio_signals(audio_path, language=language)
         (job_dir / "transcript.json").write_text(
             json.dumps([s.model_dump() for s in asr_segments], ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -202,11 +205,11 @@ def run_job(job_id: str, video_path: Path, brand_path: Path, job_dir: Path,
 
 
 def launch_in_background(job_id: str, video: Path, brand: Path, job_dir: Path,
-                         status: JobStatus) -> threading.Thread:
+                         status: JobStatus, language: str = "bn") -> threading.Thread:
     """Spawn the orchestrator in a daemon thread."""
     t = threading.Thread(
         target=run_job,
-        args=(job_id, video, brand, job_dir, status),
+        args=(job_id, video, brand, job_dir, status, language),
         daemon=True,
         name=f"orchestrator-{job_id}",
     )

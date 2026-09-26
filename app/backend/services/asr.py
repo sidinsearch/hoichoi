@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Protocol
@@ -39,6 +40,37 @@ class ASRProvider(Protocol):
 
 
 # ----------------------------- Provider implementations -----------------------------
+
+_CHUNK_SECONDS = 300
+
+
+def _audio_chunks(audio_path: Path) -> list[tuple[Path, float]]:
+    """Create cached 5-minute WAV chunks to satisfy hosted upload limits."""
+    import wave
+    try:
+        with wave.open(str(audio_path), "rb") as wav:
+            duration = wav.getnframes() / max(1, wav.getframerate())
+    except Exception:
+        return [(audio_path, 0.0)]
+    if duration <= _CHUNK_SECONDS:
+        return [(audio_path, 0.0)]
+    root = audio_path.parent / "asr_chunks"
+    root.mkdir(exist_ok=True)
+    chunks: list[tuple[Path, float]] = []
+    for index, start in enumerate(range(0, int(duration) + 1, _CHUNK_SECONDS)):
+        if start >= duration:
+            break
+        out = root / f"chunk_{index:03d}.wav"
+        if not out.exists():
+            subprocess.run(
+                ["ffmpeg", "-y", "-loglevel", "error", "-ss", str(start),
+                 "-t", str(_CHUNK_SECONDS), "-i", str(audio_path), "-ac", "1",
+                 "-ar", "16000", "-c:a", "pcm_s16le", str(out)],
+                check=True, timeout=180,
+            )
+        chunks.append((out, float(start)))
+    return chunks
+
 
 def _api_key(envvar: str) -> str | None:
     val = os.getenv(envvar)
@@ -97,9 +129,10 @@ class FasterWhisperProvider:
         audio = self._ensure_audio(audio_path)
         model = self._get_model()
         language = language or self._cfg.models.whisper_language
+        language_hint = None if language in {None, "", "auto"} else language
         log.info("ASR (faster-whisper %s) decoding %s", self._cfg.models.whisper_model, audio.name)
         segs_iter, _ = model.transcribe(
-            str(audio), language=language,
+            str(audio), language=language_hint,
             beam_size=1, best_of=1, vad_filter=True,
             vad_parameters={"min_silence_duration_ms": 400, "speech_pad_ms": 200},
             condition_on_previous_text=False, word_timestamps=False, chunk_length=15,
@@ -131,7 +164,7 @@ class GroqWhisperProvider:
                 "Set it in the environment, or switch ASR_PROVIDER."
             )
 
-    def transcribe(self, audio_path: Path, language: str | None = None) -> List[ASRSegment]:
+    def _transcribe_one(self, audio_path: Path, language: str | None = None) -> List[ASRSegment]:
         import json
         import urllib.request
 
@@ -186,6 +219,15 @@ class GroqWhisperProvider:
         log.info("Groq ASR returned %d segments", len(out))
         return out
 
+    def transcribe(self, audio_path: Path, language: str | None = None) -> List[ASRSegment]:
+        segments: List[ASRSegment] = []
+        for chunk, offset in _audio_chunks(audio_path):
+            segments.extend(
+                s.model_copy(update={"start": s.start + offset, "end": s.end + offset})
+                for s in self._transcribe_one(chunk, language)
+            )
+        return segments
+
 
 class GeminiASRProvider:
     """Google Gemini multimodal fallback (audio / video understanding)."""
@@ -201,8 +243,8 @@ class GeminiASRProvider:
                 "Gemini ASR selected but GEMINI_API_KEY / GOOGLE_API_KEY is not set."
             )
 
-    def transcribe(self, audio_path: Path, language: str | None = None) -> List[ASRSegment]:
-        """Upload audio and ask Gemini for a Bengali transcript with timestamps."""
+    def _transcribe_one(self, audio_path: Path, language: str | None = None) -> List[ASRSegment]:
+        """Upload one bounded audio chunk and ask for timestamps."""
         import base64
         import json
         import urllib.request
@@ -211,7 +253,7 @@ class GeminiASRProvider:
         with open(audio_path, "rb") as fh:
             audio_b64 = base64.b64encode(fh.read()).decode("ascii")
 
-        prompt = """Transcribe this audio in its original language (bn by default).
+        prompt = """Transcribe this audio in its original spoken language. Preserve the original script and wording; do not translate.
 Return ONLY valid JSON of this shape:
 {"segments":[{"start":<float seconds>,"end":<float seconds>,"text":<string>,"confidence":<float 0..1>}]}
 No prose, no markdown, no code fences."""
@@ -265,6 +307,15 @@ No prose, no markdown, no code fences."""
                 continue
         log.info("Gemini ASR returned %d segments", len(out))
         return out
+
+    def transcribe(self, audio_path: Path, language: str | None = None) -> List[ASRSegment]:
+        segments: List[ASRSegment] = []
+        for chunk, offset in _audio_chunks(audio_path):
+            segments.extend(
+                s.model_copy(update={"start": s.start + offset, "end": s.end + offset})
+                for s in self._transcribe_one(chunk, language)
+            )
+        return segments
 
 
 # ----------------------------- Registry & public API -----------------------------
@@ -325,17 +376,20 @@ def transcribe(audio_path: Path, language: str | None = None,
         except Exception as exc:  # noqa: BLE001
             log.warning("ASR provider %s failed: %s", provider.name, exc)
 
-    fallback = os.getenv("ASR_FALLBACK_PROVIDER", "mock").strip().lower() or "mock"
-    if fallback == "faster_whisper" and os.getenv("ALLOW_LOCAL_ASR", "").lower() not in {"1", "true", "yes", "on"}:
-        log.warning("Ignoring faster_whisper fallback because ALLOW_LOCAL_ASR is false")
-        fallback = "mock"
-    if fallback == (provider.name if provider is not None else ""):
-        fallback = "mock"
-    try:
-        return get_provider(fallback).transcribe(audio_path, language=language)
-    except Exception as exc:  # noqa: BLE001
-        log.error("ASR fallback %s failed: %s", fallback, exc)
-        return []
+    configured = os.getenv("ASR_FALLBACK_PROVIDER", "gemini").strip().lower() or "gemini"
+    fallbacks = [configured]
+    if os.getenv("ALLOW_LOCAL_ASR", "").lower() in {"1", "true", "yes", "on"}:
+        fallbacks.append("faster_whisper")
+    fallbacks.append("mock")
+    failed = provider.name if provider is not None else ""
+    for fallback in dict.fromkeys(fallbacks):
+        if fallback in {failed, ""}:
+            continue
+        try:
+            return get_provider(fallback).transcribe(audio_path, language=language)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("ASR fallback %s failed: %s", fallback, exc)
+    return []
 
 
 def reset_for_tests() -> None:

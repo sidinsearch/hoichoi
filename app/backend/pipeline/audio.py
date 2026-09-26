@@ -33,7 +33,7 @@ def _load_wav_mono(path: Path) -> tuple[np.ndarray, int]:
         return np.zeros(0, dtype=np.float32), 16000
 
 
-def compute_audio_signals(audio_path: Path) -> tuple[AudioSignals, list]:
+def compute_audio_signals(audio_path: Path, language: str | None = None) -> tuple[AudioSignals, list]:
     """Compute timeline + silence intervals. Also transcribes."""
     audio, sr = _load_wav_mono(audio_path)
     hop = sr  # 1-second buckets
@@ -84,5 +84,5 @@ def compute_audio_signals(audio_path: Path) -> tuple[AudioSignals, list]:
         mean_energy=float(np.mean([t["audio_energy"] for t in timeline])) if timeline else 0.0,
     )
 
-    asr_segments = transcribe(audio_path)
+    asr_segments = transcribe(audio_path, language=language)
     return signals, asr_segments
