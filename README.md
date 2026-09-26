@@ -136,4 +136,4 @@ pytest tests/ -v
 
 ---
 
-© 2026 hoichoi Hackathon'26 entry · MIT-licensed demo code
+© 2026 hoichoi Hackathon'26 
