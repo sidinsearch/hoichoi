@@ -9,8 +9,8 @@ export default function ProgressPanel({ stages, current }: Props) {
   return (
     <div className="card p-6">
       <div className="mb-3 flex items-center justify-between text-xs text-white/50">
-        <span className="uppercase tracking-widest">Pipeline</span>
-        <span className="font-mono">{pct}%</span>
+        <span className="uppercase tracking-widest">Pipeline stages</span>
+        <span className="font-mono text-white/70">{stages[idx] ?? "starting"}</span>
       </div>
       <div className="mb-5 h-1.5 overflow-hidden rounded-full bg-white/5">
         <div
@@ -22,7 +22,10 @@ export default function ProgressPanel({ stages, current }: Props) {
           }}
         />
       </div>
-      <ul className="grid gap-2 text-sm">
+      <div className="mb-4 flex items-center justify-between text-xs text-white/50">
+        <span>Processing</span><span className="font-mono text-lg font-bold text-white">{Math.round(pct)}%</span>
+      </div>
+      <ul className="grid gap-1.5 text-sm">
         {stages.map((s, i) => {
           const state = i < idx ? "done" : i === idx ? "active" : "todo";
           return (

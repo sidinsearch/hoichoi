@@ -164,12 +164,12 @@ export default function Page() {
             </div>
             <div className="workspace-column workspace-results">
               <div className="panel-topline"><span className="panel-number">02 / RESULTS</span></div>
-              {jobId && <ResultsPanel status={status} stage={stage} progress={progress} summary={status === "completed" ? { scenes: scenes.length, candidates: breaks.length, accepted: breaks.length, rejected: 0 } : undefined} />}
               {isLoading && <ProgressPanel stages={STAGES} current={stage} />}
+              {jobId && !isLoading && <ResultsPanel status={status} stage={stage} progress={progress} summary={status === "completed" ? { scenes: scenes.length, candidates: breaks.length, accepted: breaks.length, rejected: 0 } : undefined} />}
               {error && <div className="card border border-rose/30 bg-rose/10 p-4 text-sm text-rose"><span className="font-semibold">Error:</span> {error}</div>}
               {status === "completed" && videoUrl && <><VideoPlayer src={videoUrl} breaks={breaks} onBreakTriggered={b => setLastTriggeredBreak(b)} /><BreakDetails breaks={breaks} scenes={scenes} /><TranscriptPanel scenes={scenes} breaks={breaks} /></>}
               {lastTriggeredBreak && <div className="card p-5"><div className="section-kicker">Now playing</div><div className="mt-1 text-lg font-semibold">{lastTriggeredBreak.display_name}</div><p className="mt-2 text-sm text-white/55">{lastTriggeredBreak.context_summary}</p></div>}
-              {jobId && <div id="artifacts" className="grid gap-3"><div className="section-kicker">Generated files</div><ArtifactCards artifacts={artifacts} /></div>}
+              {status === "completed" && <div id="artifacts" className="grid gap-3"><div className="section-kicker">Generated files</div><ArtifactCards artifacts={artifacts} /></div>}
             </div>
           </div>
         </section>

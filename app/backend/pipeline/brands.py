@@ -177,7 +177,16 @@ def assign_brands(
             continue
         scene_id = c.scene_id
         if not scene_id or scene_id not in scenes_by_id:
-            continue
+            # Pause candidates can be inside a scene rather than at its end.
+            # Attach them to the containing scene so they can still be brand-matched.
+            containing = next(
+                (sc for sc in scenes_by_id.values() if sc.start_sec <= c.timestamp_sec <= sc.end_sec),
+                None,
+            )
+            if containing is None:
+                continue
+            scene_id = containing.scene_id
+            c.scene_id = scene_id
         sc = scenes_by_id[scene_id]
         decisions = scene_ranking[scene_id]
         # Top eligible brand (if any)
