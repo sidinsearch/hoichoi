@@ -1,0 +1,35 @@
+{
+  "project": "hoichoi-context-aware-ad-intelligence",
+  "problem": "Problem 1 \u2014 Context-Aware Video Segmentation & Intelligent Ad Placement",
+  "inputs": [
+    "bengali_video",
+    "brand_json"
+  ],
+  "outputs": [
+    "scenes.json",
+    "debug.json",
+    "vmap.xml",
+    "playable_web_demo"
+  ],
+  "playback": {
+    "source_video_modified": false,
+    "ad_mode": "virtual_black_screen",
+    "resume_after_ad": true
+  },
+  "hard_constraints": [
+    "no_mid_sentence",
+    "no_active_dialogue",
+    "minimum_gap",
+    "max_breaks_per_hour",
+    "max_ad_load",
+    "negative_context_hard_block"
+  ],
+  "generalization": "9th unseen brand with zero code changes",
+  "source": "hoichoi Hackathon'26 Participant Handbook, Problem 1, pages 4-5",
+  "time_constraint_hours": 12,
+  "submission": [
+    "live_demo",
+    "public_github",
+    "under_5_min_explanatory_video"
+  ]
+}

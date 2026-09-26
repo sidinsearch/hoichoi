@@ -20,13 +20,32 @@
 }
 
 html, body {
-  background: var(--bg-0);
+  min-height: 100%;
+  background:
+    radial-gradient(circle at 50% -10%, rgba(240, 90, 115, .10), transparent 34rem),
+    linear-gradient(180deg, #0b0e13 0%, var(--bg-0) 48%, #07090c 100%);
   color: var(--text-0);
   font-family: ui-sans-serif, system-ui, "Inter", "Plus Jakarta Sans", sans-serif;
   font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
+
+.app-shell { min-height: 100vh; }
+.demo-heading { max-width: 760px; }
+.demo-heading h1 { font-size: clamp(2.25rem, 5vw, 4.5rem); line-height: .98; letter-spacing: -.06em; font-weight: 700; }
+.demo-heading h1 em { color: var(--rose-soft); font-style: normal; }
+.demo-heading p { color: var(--text-1); font-size: 1rem; line-height: 1.7; }
+.workspace { display: grid; grid-template-columns: minmax(0, .92fr) minmax(0, 1.4fr); gap: 20px; align-items: start; }
+.workspace-column { display: grid; gap: 14px; }
+.workspace-column > .card { box-shadow: 0 18px 45px rgba(0,0,0,.16); }
+.workspace-results { min-height: 260px; }
+.workspace-results:empty { display: grid; place-items: center; border: 1px dashed var(--line-strong); border-radius: 16px; background: rgba(255,255,255,.018); }
+.workspace-results:empty::after { content: "Your analysis results will appear here"; color: var(--text-2); font-size: .85rem; }
+.panel-topline { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.panel-number { color: var(--amber); font: 700 .7rem ui-monospace, SFMono-Regular, monospace; letter-spacing: .12em; }
+@media (max-width: 900px) { .workspace { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .demo-heading h1 { font-size: 2.7rem; } .workspace { gap: 12px; } }
 
 button, a, select, input { min-height: 44px; }
 button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }

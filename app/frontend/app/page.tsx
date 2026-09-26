@@ -147,24 +147,30 @@ export default function Page() {
   return (
     <>
       <Header />
-      <main>
-        <section id="demo" className="mx-auto max-w-5xl px-6 pb-20 pt-12">
-          <div className="mb-8">
-            <div className="section-kicker">Analysis workspace</div>
-            <h1 className="mt-3 text-4xl font-semibold tracking-tight">Find safe moments for ads.</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/50">Choose a library video or upload your own. Use the default catalogue or upload a custom brand JSON.</p>
+      <main className="app-shell">
+        <section id="demo" className="mx-auto max-w-7xl px-6 pb-24 pt-16 lg:px-10">
+          <div className="demo-heading mb-12">
+            <div className="section-kicker"><span className="status-live" />Live demo · deterministic ad placement</div>
+            <h1 className="mt-5">Turn long-form video into <em>safe ad moments.</em></h1>
+            <p className="mt-5 max-w-2xl">Select a bundled episode or upload your own. The system analyzes scenes, applies safety rules, matches brands, and gives you a playable result.</p>
           </div>
-          <div className="grid gap-4">
-            <BrandPicker disabled={isLoading} onChange={setBrandFile} />
-            <ResourcePicker onAnalyze={analyzeResource} language={language} onLanguageChange={setLanguage} disabled={isLoading} />
-            <div className="flex items-center gap-3 text-xs uppercase tracking-widest text-white/30"><span className="h-px flex-1 bg-white/10" />or upload your own video<span className="h-px flex-1 bg-white/10" /></div>
-            <UploadPanel onAnalyze={analyze} disabled={isLoading} loading={isLoading} />
-            {jobId && <ResultsPanel status={status} stage={stage} progress={progress} summary={status === "completed" ? { scenes: scenes.length, candidates: breaks.length, accepted: breaks.length, rejected: 0 } : undefined} />}
-            {isLoading && <ProgressPanel stages={STAGES} current={stage} />}
-            {error && <div className="card border border-rose/30 bg-rose/10 p-4 text-sm text-rose"><span className="font-semibold">Error:</span> {error}</div>}
-            {status === "completed" && videoUrl && <><VideoPlayer src={videoUrl} breaks={breaks} onBreakTriggered={b => setLastTriggeredBreak(b)} /><BreakDetails breaks={breaks} scenes={scenes} /><TranscriptPanel scenes={scenes} breaks={breaks} /></>}
-            {lastTriggeredBreak && <div className="card p-5"><div className="section-kicker">Now playing</div><div className="mt-1 text-lg font-semibold">{lastTriggeredBreak.display_name}</div><p className="mt-2 text-sm text-white/55">{lastTriggeredBreak.context_summary}</p></div>}
-            {jobId && <div id="artifacts" className="grid gap-3"><div className="section-kicker">Artifacts</div><ArtifactCards artifacts={artifacts} /></div>}
+          <div className="workspace">
+            <div className="workspace-column">
+              <div className="panel-topline"><span className="panel-number">01 / INPUT</span><span className="text-xs text-white/35">Video + brand rules</span></div>
+              <BrandPicker disabled={isLoading} onChange={setBrandFile} />
+              <ResourcePicker onAnalyze={analyzeResource} language={language} onLanguageChange={setLanguage} disabled={isLoading} />
+              <div className="flex items-center gap-3 px-1 text-[10px] uppercase tracking-[.2em] text-white/30"><span className="h-px flex-1 bg-white/10" />or upload<span className="h-px flex-1 bg-white/10" /></div>
+              <UploadPanel onAnalyze={analyze} disabled={isLoading} loading={isLoading} />
+            </div>
+            <div className="workspace-column workspace-results">
+              <div className="panel-topline"><span className="panel-number">02 / RESULTS</span><span className="text-xs text-white/35">Playback + artifacts</span></div>
+              {jobId && <ResultsPanel status={status} stage={stage} progress={progress} summary={status === "completed" ? { scenes: scenes.length, candidates: breaks.length, accepted: breaks.length, rejected: 0 } : undefined} />}
+              {isLoading && <ProgressPanel stages={STAGES} current={stage} />}
+              {error && <div className="card border border-rose/30 bg-rose/10 p-4 text-sm text-rose"><span className="font-semibold">Error:</span> {error}</div>}
+              {status === "completed" && videoUrl && <><VideoPlayer src={videoUrl} breaks={breaks} onBreakTriggered={b => setLastTriggeredBreak(b)} /><BreakDetails breaks={breaks} scenes={scenes} /><TranscriptPanel scenes={scenes} breaks={breaks} /></>}
+              {lastTriggeredBreak && <div className="card p-5"><div className="section-kicker">Now playing</div><div className="mt-1 text-lg font-semibold">{lastTriggeredBreak.display_name}</div><p className="mt-2 text-sm text-white/55">{lastTriggeredBreak.context_summary}</p></div>}
+              {jobId && <div id="artifacts" className="grid gap-3"><div className="section-kicker">Generated files</div><ArtifactCards artifacts={artifacts} /></div>}
+            </div>
           </div>
         </section>
       </main>
