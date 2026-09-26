@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 type Props = { stages: string[]; current?: string };
 
 export default function ProgressPanel({ stages, current }: Props) {
@@ -9,30 +7,36 @@ export default function ProgressPanel({ stages, current }: Props) {
   const idx = Math.max(0, stages.indexOf(current));
   const pct = Math.round(((idx + 1) / stages.length) * 100);
   return (
-    <div className="rounded-2xl border border-white/10 bg-carbon p-6">
-      <div className="mb-3 flex items-center justify-between text-xs text-white/60">
-        <span>Live pipeline progress</span>
+    <div className="card p-6">
+      <div className="mb-3 flex items-center justify-between text-xs text-white/50">
+        <span className="uppercase tracking-widest">Pipeline</span>
         <span className="font-mono">{pct}%</span>
       </div>
-      <div className="mb-4 h-2 overflow-hidden rounded-full bg-white/10">
-        <div className="h-full bg-rose transition-all" style={{ width: `${pct}%` }} />
+      <div className="mb-5 h-1.5 overflow-hidden rounded-full bg-white/5">
+        <div
+          className="h-full rounded-full"
+          style={{
+            width: `${pct}%`,
+            background: "linear-gradient(90deg, var(--rose), var(--rose-soft))",
+            transition: "width 240ms ease",
+          }}
+        />
       </div>
-      <ul className="grid gap-1 text-xs">
-        {stages.map((s, i) => (
-          <li
-            key={s}
-            className={`flex items-center gap-2 ${
-              i < idx
-                ? "text-emerald-400"
-                : i === idx
-                ? "text-rose"
-                : "text-white/40"
-            }`}
-          >
-            <span className="font-mono">{i < idx ? "✓" : i === idx ? "●" : "○"}</span>
-            <span>{s}</span>
-          </li>
-        ))}
+      <ul className="grid gap-2 text-sm">
+        {stages.map((s, i) => {
+          const state = i < idx ? "done" : i === idx ? "active" : "todo";
+          return (
+            <li key={s} className="flex items-center gap-3">
+              <span className={`dot ${state}`} />
+              <span className={`font-mono text-xs ${state === "active" ? "text-rose" : state === "done" ? "text-emerald-300" : "text-white/40"}`}>
+                {state === "done" ? "✓" : state === "active" ? "●" : "○"}
+              </span>
+              <span className={state === "active" ? "text-white" : state === "done" ? "text-white/70" : "text-white/40"}>
+                {s}
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

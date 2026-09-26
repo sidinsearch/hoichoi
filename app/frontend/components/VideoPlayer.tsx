@@ -9,16 +9,23 @@ type Props = {
   onBreakTriggered?: (b: BreakInfo) => void;
 };
 
+function formatTs(s: number): string {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = Math.floor(s % 60);
+  return [h, m, sec].map((n) => String(n).padStart(2, "0")).join(":");
+}
+
 export default function VideoPlayer({ src, breaks, onBreakTriggered }: Props) {
   const ref = useRef<HTMLVideoElement>(null);
   const consumed = useRef<Set<string>>(new Set());
-  const [phase, setPhase] = useState<"playing" | "ad" | "ended">("playing");
+  const [phase, setPhase] = useState<"playing" | "ad" | "ended" | "loading">("loading");
   const [activeAd, setActiveAd] = useState<BreakInfo | null>(null);
   const [remaining, setRemaining] = useState<number>(0);
   const [now, setNow] = useState<number>(0);
+  const [duration, setDuration] = useState<number>(0);
   const intervalRef = useRef<number | null>(null);
 
-  // Reset consumed break set if the video src changes (new job).
   useEffect(() => {
     consumed.current = new Set();
   }, [src]);
@@ -33,20 +40,18 @@ export default function VideoPlayer({ src, breaks, onBreakTriggered }: Props) {
         }
         setPhase("playing");
         setActiveAd(null);
-        // Resume episode after a tick so React state settles
-        setTimeout(() => ref.current?.play().catch(() => undefined), 50);
+        setTimeout(() => ref.current?.play().catch(() => undefined), 80);
       }
       return next;
     });
   }, []);
 
-  // Hook: when entering "ad" phase, pause video + start countdown
   useEffect(() => {
     if (phase === "ad" && activeAd) {
       const v = ref.current;
       if (v) {
         v.pause();
-        v.currentTime = activeAd.timestamp_sec; // anchor
+        v.currentTime = activeAd.timestamp_sec;
       }
       setRemaining(activeAd.duration_sec);
       consumed.current.add(activeAd.id);
@@ -62,13 +67,11 @@ export default function VideoPlayer({ src, breaks, onBreakTriggered }: Props) {
     }
   }, [phase, activeAd, tickAd, onBreakTriggered]);
 
-  // timeupdate → check whether we crossed a break boundary
   const onTime = useCallback(() => {
     const v = ref.current;
     if (!v) return;
     setNow(v.currentTime);
     if (phase !== "playing") return;
-
     const next = nextPhase(v.currentTime, breaks, consumed.current, activeAd, remaining);
     if (next.kind === "ad") {
       setActiveAd(next.break);
@@ -78,64 +81,118 @@ export default function VideoPlayer({ src, breaks, onBreakTriggered }: Props) {
     }
   }, [breaks, phase, activeAd, remaining]);
 
-  const handleSeek = (ts: number) => {
+  const seekToBreak = (b: BreakInfo) => {
     const v = ref.current;
     if (!v) return;
-    v.currentTime = ts;
+    v.currentTime = seekBeforeBreak(b.timestamp_sec);
   };
 
-  const seekToBreak = (b: BreakInfo) => {
-    handleSeek(seekBeforeBreak(b.timestamp_sec));
-  };
+  const pct = duration > 0 ? Math.min(100, (now / duration) * 100) : 0;
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-carbon p-4">
+    <div className="card overflow-hidden p-3">
       <div className="relative overflow-hidden rounded-xl bg-black">
         <video
           ref={ref}
           src={src}
           controls
-          className="w-full max-h-[60vh]"
+          playsInline
+          className="w-full max-h-[62vh] bg-black"
           onTimeUpdate={onTime}
+          onLoadedMetadata={(e) => {
+            setDuration((e.target as HTMLVideoElement).duration || 0);
+            setPhase("playing");
+          }}
           onEnded={() => setPhase("ended")}
           preload="metadata"
         />
+
+        {phase === "loading" && (
+          <div className="absolute inset-0 z-20 grid place-items-center bg-black/60 backdrop-blur">
+            <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/15 border-t-rose" />
+          </div>
+        )}
+
         {phase === "ad" && activeAd && (
-          <div className="ad-overlay absolute inset-0 z-30 flex flex-col items-center justify-center text-center text-white">
-            <div className="mb-4 text-xs tracking-[0.4em] text-rose">ADVERTISEMENT</div>
-            <div className="text-4xl font-bold tracking-tight md:text-6xl">{activeAd.display_name}</div>
-            <div className="mt-2 text-sm text-white/70 md:text-base">{activeAd.category}</div>
-            <div className="mt-8 inline-flex h-24 w-24 items-center justify-center rounded-full border border-white/20 text-3xl font-mono">
-              {remaining}s
+          <div className="ad-overlay absolute inset-0 z-30 grid place-items-center">
+            <div className="w-full max-w-xl px-8 text-center text-white">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.3em] text-white/70">
+                <span className="h-1.5 w-1.5 rounded-full bg-rose pulse" />
+                Advertisement
+              </div>
+              <h2 className="text-5xl font-bold leading-none tracking-tight md:text-6xl">
+                {activeAd.display_name}
+              </h2>
+              <div className="mt-3 text-sm text-white/60 md:text-base">
+                {activeAd.category}
+              </div>
+              <div className="mt-10 grid place-items-center">
+                <div
+                  className="grid h-28 w-28 place-items-center rounded-full border-2 border-white/15 font-mono text-4xl"
+                  style={{ fontVariantNumeric: "tabular-nums" }}
+                >
+                  {remaining}s
+                </div>
+              </div>
+              <div className="mt-8 max-w-md text-xs text-white/50">
+                <span className="opacity-70">Selected for:</span>{" "}
+                <span className="text-white/80">
+                  {activeAd.context_summary || "scene match"}
+                </span>
+              </div>
+              <div className="mx-auto mt-8 h-1 w-40 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full bg-rose"
+                  style={{
+                    width: `${Math.round(
+                      ((activeAd.duration_sec - remaining) /
+                        activeAd.duration_sec) * 100
+                    )}%`,
+                    transition: "width 1s linear",
+                  }}
+                />
+              </div>
             </div>
-            <div className="mt-4 max-w-md text-xs text-white/50">
-              <span className="opacity-70">Contextually selected for:</span>{" "}
-              <span className="text-white/80">{activeAd.context_summary || "scene match"}</span>
+          </div>
+        )}
+
+        {phase === "ended" && (
+          <div className="absolute inset-0 z-20 grid place-items-center bg-black/70 text-center">
+            <div>
+              <div className="text-3xl font-bold">Episode complete</div>
+              <div className="mt-2 text-sm text-white/50">
+                {breaks.length} virtual ad break{breaks.length === 1 ? "" : "s"} delivered
+              </div>
             </div>
           </div>
         )}
       </div>
 
       {/* Timeline */}
-      <div className="relative mt-4 h-2 rounded-full bg-white/10">
-        <div
-          className="absolute left-0 top-0 h-full rounded-full bg-rose"
-          style={{ width: `${Math.min(100, (now / (ref.current?.duration || 1)) * 100)}%` }}
-        />
-        {breaks.map((b) => (
-          <button
-            key={b.id}
-            title={`${b.display_name} @ ${b.timestamp_sec.toFixed(1)}s`}
-            className="absolute top-0 z-10 h-full w-1.5 -translate-x-1/2 rounded-full bg-amber-400 hover:bg-amber-200"
-            style={{ left: `${Math.min(100, (b.timestamp_sec / (ref.current?.duration || 1)) * 100)}%` }}
-            onClick={() => seekToBreak(b)}
-          />
-        ))}
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-white/60">
-        <span>{now.toFixed(1)}s</span>
-        <span>{breaks.length} ad break{breaks.length === 1 ? "" : "s"} planned</span>
+      <div className="mt-4 px-2">
+        <div className="timeline">
+          <div className="timeline-fill" style={{ width: `${pct}%` }} />
+          {breaks.map((b) => {
+            const left = duration > 0 ? (b.timestamp_sec / duration) * 100 : 0;
+            return (
+              <button
+                key={b.id}
+                title={`${b.display_name} @ ${formatTs(b.timestamp_sec)}`}
+                className="timeline-marker"
+                style={{ left: `${Math.min(100, Math.max(0, left))}%` }}
+                onClick={() => seekToBreak(b)}
+                aria-label={`Seek to break for ${b.display_name}`}
+              />
+            );
+          })}
+        </div>
+        <div className="mt-3 flex items-center justify-between font-mono text-xs text-white/50">
+          <span>{formatTs(now)}</span>
+          <span className="text-white/40">
+            {breaks.length} break{breaks.length === 1 ? "" : "s"} scheduled
+          </span>
+          <span>{formatTs(duration)}</span>
+        </div>
       </div>
     </div>
   );

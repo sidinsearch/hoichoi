@@ -192,9 +192,12 @@ def apply_hard_filters(
             reasons.append("max_breaks_per_hour")
         c.hard_constraints.hourly_limit_ok = hourly_ok
 
-        # Ad load ratio (assume a 20s ad — checked later by brand engine)
-        projected_ad_load_pct = (cumulative_ad_sec + 20.0) / max(1.0, video_duration_sec) * 100.0
-        ad_load_ok = projected_ad_load_pct <= cfg.max_ad_load_percent
+        # Ad load ratio (uses the actually-selected creative duration from brands;
+        # falls back to a 20s default so the very early candidate passes still hold).
+        projected_sec = float(getattr(c, "_projected_ad_sec", 20.0))
+        projected_ad_load_pct = (cumulative_ad_sec + projected_sec) / max(1.0, video_duration_sec) * 100.0
+        # Below 5 min, ad-load ratio is noisy — skip the cap.
+        ad_load_ok = (video_duration_sec < 300) or (projected_ad_load_pct <= cfg.max_ad_load_percent)
         if not ad_load_ok:
             reasons.append("max_ad_load")
         c.hard_constraints.ad_load_ok = ad_load_ok

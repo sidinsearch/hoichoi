@@ -1,12 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRef } from "react";
+
+import Header from "@/components/Header";
+import Hero from "@/components/Hero";
+import HowItWorks from "@/components/HowItWorks";
+import FeatureGrid from "@/components/FeatureGrid";
 import UploadPanel from "@/components/UploadPanel";
 import ResultsPanel from "@/components/ResultsPanel";
 import ArtifactCards from "@/components/ArtifactCards";
 import VideoPlayer from "@/components/VideoPlayer";
 import BreakDetails from "@/components/BreakDetails";
 import ProgressPanel from "@/components/ProgressPanel";
+import TranscriptPanel from "@/components/TranscriptPanel";
+import Footer from "@/components/Footer";
 import type { BreakInfo } from "@/lib/playback";
 
 const STAGES = [
@@ -23,15 +31,19 @@ const STAGES = [
   "ready",
 ];
 
+type Status = "idle" | "queued" | "processing" | "completed" | "failed";
+
 export default function Page() {
   const [jobId, setJobId] = useState<string | null>(null);
-  const [status, setStatus] = useState<string>("idle");
+  const [status, setStatus] = useState<Status>("idle");
   const [stage, setStage] = useState<string | undefined>(undefined);
   const [progress, setProgress] = useState<number>(0);
   const [breaks, setBreaks] = useState<BreakInfo[]>([]);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [scenes, setScenes] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [lastTriggeredBreak, setLastTriggeredBreak] = useState<BreakInfo | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const analyze = async (video: File, brandJson: File) => {
     setStatus("queued");
@@ -45,55 +57,71 @@ export default function Page() {
     const fd = new FormData();
     fd.append("video", video);
     fd.append("brand_json", brandJson);
-    const r = await fetch("/api/analyze", { method: "POST", body: fd });
-    if (!r.ok) {
-      const t = await r.text();
-      setError(`Upload failed: ${r.status} ${t}`);
+
+    try {
+      const r = await fetch("/api/analyze", { method: "POST", body: fd });
+      if (!r.ok) {
+        const t = await r.text();
+        throw new Error(`Upload failed: ${r.status} ${t}`);
+      }
+      const { job_id } = await r.json();
+      setJobId(job_id);
+      poll(job_id);
+    } catch (e: any) {
+      setError(e?.message ?? "Unknown error");
       setStatus("failed");
-      return;
     }
-    const { job_id } = await r.json();
-    setJobId(job_id);
-    poll(job_id);
   };
 
   const poll = async (id: string) => {
+    const ctrl = new AbortController();
+    abortRef.current?.abort();
+    abortRef.current = ctrl;
     const url = `/api/jobs/${id}`;
-    let ticker = 0;
-    while (ticker < 1200) {
-      const r = await fetch(url);
-      if (!r.ok) {
-        setError(`Polling failed: ${r.status}`);
-        return;
+    const tick = async () => {
+      try {
+        const r = await fetch(url, { signal: ctrl.signal });
+        if (!r.ok) {
+          setError(`Polling failed: ${r.status}`);
+          setStatus("failed");
+          return;
+        }
+        const s = await r.json();
+        setStatus(s.status);
+        setStage(s.stage);
+        setProgress(s.progress ?? 0);
+        if (s.status === "completed" || s.status === "failed") {
+          if (s.status === "failed") setError(s.error || "Job failed");
+          // Pull artifacts
+          try {
+            const pb = await fetch(`/api/jobs/${id}/playback`);
+            if (pb.ok) {
+              const p = await pb.json();
+              setBreaks(p.breaks ?? []);
+              setVideoUrl(p.video_url ?? `/api/jobs/${id}/video`);
+            }
+            const sc = await fetch(`/api/jobs/${id}/scenes`);
+            if (sc.ok) {
+              const sd = await sc.json();
+              setScenes(sd.scenes ?? []);
+            }
+          } catch {}
+          return;
+        }
+        setTimeout(tick, 1500);
+      } catch (e: any) {
+        if (e?.name !== "AbortError") {
+          setError("Lost connection to backend");
+          setStatus("failed");
+        }
       }
-      const s = await r.json();
-      setStatus(s.status);
-      setStage(s.stage);
-      setProgress(s.progress ?? 0);
-      if (s.status === "completed" || s.status === "failed") {
-        if (s.status === "failed") setError(s.error || "Job failed");
-        break;
-      }
-      await new Promise((res) => setTimeout(res, 1500));
-      ticker += 1;
-    }
-    // Once completed, fetch playback
-    try {
-      const pb = await fetch(`/api/jobs/${id}/playback`);
-      if (pb.ok) {
-        const p = await pb.json();
-        setBreaks(p.breaks ?? []);
-        setVideoUrl(p.video_url ?? `/api/jobs/${id}/video`);
-      }
-      const sc = await fetch(`/api/jobs/${id}/scenes`);
-      if (sc.ok) {
-        const s = await sc.json();
-        setScenes(s.scenes ?? []);
-      }
-    } catch (e) {
-      // ignore
-    }
+    };
+    tick();
   };
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const isLoading = status === "queued" || status === "processing";
 
   const artifacts = jobId
     ? [
@@ -104,71 +132,93 @@ export default function Page() {
     : [];
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
-      <header className="mb-10 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            hoichoi <span className="text-rose">·</span> Context-Aware Ad Intelligence
-          </h1>
-          <p className="mt-1 text-sm text-white/50">
-            Semantic scenes → safe breaks → brand-safe placement. Source video is never modified.
-          </p>
-        </div>
-        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
-          Hackathon'26 — Problem 1
-        </span>
-      </header>
+    <>
+      <Header />
+      <main>
+        <Hero />
+        <FeatureGrid />
+        <HowItWorks />
 
-      <section className="grid gap-8">
-        <UploadPanel onAnalyze={analyze} disabled={status === "queued" || status === "processing"} />
-
-        <ResultsPanel
-          jobId={jobId}
-          videoUrl={videoUrl}
-          breaks={breaks}
-          status={status}
-          stage={stage}
-          progress={progress}
-        />
-
-        {(status === "processing" || status === "queued") && (
-          <ProgressPanel stages={STAGES} current={stage} />
-        )}
-
-        {error && (
-          <div className="rounded-lg border border-rose/50 bg-rose/10 p-4 text-sm text-rose">
-            {error}
+        <section id="demo" className="mx-auto max-w-7xl px-6 pb-20">
+          <div className="mb-8">
+            <h2 className="text-3xl font-bold tracking-tight">Demo</h2>
+            <p className="mt-2 text-sm text-white/60">
+              Upload a Bengali drama + the synthetic brand catalogue. The pipeline
+              will run end-to-end and stream live progress.
+            </p>
           </div>
-        )}
 
-        {status === "completed" && videoUrl && (
-          <section className="grid gap-6">
-            <VideoPlayer src={videoUrl} breaks={breaks} />
-            <BreakDetails breaks={breaks} />
-            {scenes.length > 0 && (
-              <div className="rounded-2xl border border-white/10 bg-carbon p-4">
-                <div className="mb-2 text-xs uppercase tracking-widest text-white/40">
-                  Scenes ({scenes.length})
+          <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
+            <div className="grid gap-6">
+              <UploadPanel onAnalyze={analyze} disabled={isLoading} loading={isLoading} />
+              {jobId && (
+                <ResultsPanel
+                  status={status}
+                  stage={stage}
+                  progress={progress}
+                  summary={
+                    status === "completed"
+                      ? {
+                          scenes: scenes.length,
+                          candidates: breaks.length,
+                          accepted: breaks.length,
+                          rejected: 0,
+                        }
+                      : undefined
+                  }
+                />
+              )}
+              {(isLoading) && <ProgressPanel stages={STAGES} current={stage} />}
+              {error && (
+                <div className="card border border-rose/30 bg-rose/10 p-4 text-sm text-rose">
+                  <span className="font-semibold">Error:</span> {error}
                 </div>
-                <ul className="grid gap-1 text-xs">
-                  {scenes.slice(0, 25).map((sc: any) => (
-                    <li key={sc.scene_id} className="font-mono text-white/70">
-                      {sc.scene_id} · {sc.start_sec.toFixed(1)}s → {sc.end_sec.toFixed(1)}s ·{" "}
-                      {sc.context?.activities?.join(", ") || "no activity"}
-                    </li>
-                  ))}
-                </ul>
+              )}
+              {status === "completed" && videoUrl && (
+                <>
+                  <VideoPlayer
+                    src={videoUrl}
+                    breaks={breaks}
+                    onBreakTriggered={(b) => setLastTriggeredBreak(b)}
+                  />
+                  <BreakDetails breaks={breaks} scenes={scenes} />
+                  <TranscriptPanel scenes={scenes} breaks={breaks} />
+                </>
+              )}
+            </div>
+
+            <aside className="grid gap-6 lg:sticky lg:top-24 lg:h-fit">
+              <div className="card p-5">
+                <div className="text-[11px] uppercase tracking-widest text-white/40">Connection</div>
+                <div className="mt-1 flex items-center gap-2 text-sm">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                  <span className="text-white/80">Backend online</span>
+                </div>
+                <div className="mt-3 text-xs text-white/40">
+                  POST /api/analyze · GET /api/jobs/{`{id}`}
+                </div>
               </div>
-            )}
-          </section>
-        )}
 
-        <ArtifactCards artifacts={artifacts} />
-      </section>
+              <div id="artifacts" className="grid gap-4">
+                <div className="text-[11px] uppercase tracking-widest text-white/40">Artifacts</div>
+                <ArtifactCards artifacts={artifacts} />
+              </div>
 
-      <footer className="mt-16 text-center text-xs text-white/30">
-        hoichoi Hackathon'26 · built end-to-end with multimodal AI · brands are data, never code
-      </footer>
-    </main>
+              {lastTriggeredBreak && (
+                <div className="card p-5">
+                  <div className="text-[11px] uppercase tracking-widest text-rose">Now playing</div>
+                  <div className="mt-1 text-lg font-bold">{lastTriggeredBreak.display_name}</div>
+                  <div className="text-sm text-white/60">{lastTriggeredBreak.category}</div>
+                  <p className="mt-3 rounded-md bg-white/5 p-3 text-xs italic text-white/70">
+                    "{lastTriggeredBreak.context_summary}"
+                  </p>
+                </div>
+              )}
+            </aside>
+          </div>
+        </section>
+      </main>
+      <Footer />
+    </>
   );
 }
