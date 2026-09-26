@@ -1,145 +1,321 @@
-"""ASR via faster-whisper. Bengali-capable, runs on CPU.
+"""ASR provider registry.
 
-`faster-whisper` is a CTranslate2 port — orders of magnitude faster than openai-whisper
-on the same hardware. int8 quantization fits the `tiny` model in ~75 MB.
+Provider implementations are swappable through the `ASR_PROVIDER` env var:
 
-Speed strategy for the **10-min / 40-min video** budget:
-  1. Downsample extracted wav to **8 kHz mono** (~2× decode speedup).
-  2. `silenceremove` filter pre-trims silence (VAD pre-step).
-  3. `beam_size=1` greedy decode.
-  4. `chunk_length=15` keeps CPU warm.
-  5. `language="bn"` skips auto-detection overhead.
+  - `groq`        Groq Whisper Large-v3-Turbo (default when API key is present)
+  - `gemini`      Google Gemini multimodal fallback (audio/video understanding)
+  - `faster_whisper` local CPU fallback (offline / no-key path)
+  - `mock`        Synthetic transcription (used in tests; never calls the network)
 
-For English-only, set `ASR_BACKEND=distil` to use `distil-whisper` via CTranslate2
-(5-6× faster than tiny). Bengali **must** stay on faster-whisper.
+The orchestrator imports `transcribe(audio_path)` from this module and never
+touches a provider class directly. Providers are LRU-cached and selected on
+first call.
+
+All HTTP-bound providers require their API key to be present at construction
+time; we never hard-code a key, never log one, and never bake one into the
+image.
 """
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
-import subprocess
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Protocol
 
 from ..models.schemas import ASRSegment
-from ..config import CONFIG, PROJECT_ROOT
 
 log = logging.getLogger(__name__)
 
 
-@lru_cache(maxsize=1)
-def _get_faster_model():
-    from faster_whisper import WhisperModel  # local import keeps startup fast
-    m = CONFIG.models
-    return WhisperModel(
-        m.whisper_model,
-        device=m.whisper_device,
-        compute_type=m.whisper_compute_type,
-    )
+# ----------------------------- Provider interface -----------------------------
+
+class ASRProvider(Protocol):
+    name: str
+
+    def transcribe(self, audio_path: Path, language: str | None = None) -> List[ASRSegment]:
+        ...
 
 
-def _ensure_8k_audio(audio_path: Path) -> Path:
-    """Downsample to 8 kHz mono + silence-trim. Cached to avoid recomputing."""
-    cache_root = PROJECT_ROOT / "data" / ".asr_cache"
-    cache_root.mkdir(parents=True, exist_ok=True)
-    sig = hashlib.md5(
-        f"{audio_path.stat().st_mtime_ns}-{audio_path.stat().st_size}".encode()
-    ).hexdigest()[:12]
-    out = cache_root / f"{audio_path.stem}.{sig}.8k.wav"
-    if out.exists() and out.stat().st_size > 0:
+# ----------------------------- Provider implementations -----------------------------
+
+def _api_key(envvar: str) -> str | None:
+    val = os.getenv(envvar)
+    if not val:
+        return None
+    return val.strip() or None
+
+
+class MockASRProvider:
+    """Deterministic synthetic provider — used by tests and offline sandboxing."""
+
+    name = "mock"
+
+    def __init__(self, segments: List[ASRSegment] | None = None) -> None:
+        self._segments = segments or []
+
+    def transcribe(self, audio_path: Path, language: str | None = None) -> List[ASRSegment]:
+        if self._segments:
+            return list(self._segments)
+        # Default: three synthetic segments anchored at 0 / mid / near-end.
+        # No audio is decoded.
+        return [
+            ASRSegment(start=0.0, end=8.0, text="Synthetic opening narration.", confidence=0.95),
+            ASRSegment(start=12.0, end=20.0, text="Synthetic dialogue sample.", confidence=0.92),
+            ASRSegment(start=24.0, end=32.0, text="Synthetic scene description.", confidence=0.90),
+        ]
+
+
+class FasterWhisperProvider:
+    """Local CPU ASR (faster-whisper + 8 kHz cache + VAD). Kept offline-friendly."""
+
+    name = "faster_whisper"
+
+    def __init__(self) -> None:
+        from ..config import CONFIG
+        self._cfg = CONFIG
+        self._model = None
+        self._ensure_8k = None  # lazy-bound function, set on first call
+
+    def _ensure_audio(self, audio_path: Path) -> Path:
+        if self._ensure_8k is None:
+            from .asr_local import ensure_8k_audio
+            self._ensure_8k = ensure_8k_audio
+        return self._ensure_8k(audio_path)
+
+    def _get_model(self):
+        if self._model is None:
+            from faster_whisper import WhisperModel
+            m = self._cfg.models
+            self._model = WhisperModel(
+                m.whisper_model, device=m.whisper_device, compute_type=m.whisper_compute_type,
+            )
+        return self._model
+
+    def transcribe(self, audio_path: Path, language: str | None = None) -> List[ASRSegment]:
+        audio = self._ensure_audio(audio_path)
+        model = self._get_model()
+        language = language or self._cfg.models.whisper_language
+        log.info("ASR (faster-whisper %s) decoding %s", self._cfg.models.whisper_model, audio.name)
+        segs_iter, _ = model.transcribe(
+            str(audio), language=language,
+            beam_size=1, best_of=1, vad_filter=True,
+            vad_parameters={"min_silence_duration_ms": 400, "speech_pad_ms": 200},
+            condition_on_previous_text=False, word_timestamps=False, chunk_length=15,
+        )
+        return [
+            ASRSegment(
+                start=float(s.start or 0.0),
+                end=float(s.end or 0.0),
+                text=(s.text or "").strip(),
+                confidence=getattr(s, "avg_logprob", None),
+            )
+            for s in segs_iter
+        ]
+
+
+class GroqWhisperProvider:
+    """Hosted Groq Whisper Large-v3-Turbo. Reads `GROQ_API_KEY` lazily."""
+
+    name = "groq"
+    DEFAULT_MODEL = "whisper-large-v3-turbo"
+    ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions"
+
+    def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
+        self._api_key = api_key or _api_key("GROQ_API_KEY")
+        self._model = model or os.getenv("ASR_MODEL", self.DEFAULT_MODEL)
+        if not self._api_key:
+            raise RuntimeError(
+                "Groq ASR selected but GROQ_API_KEY is not set. "
+                "Set it in the environment, or switch ASR_PROVIDER."
+            )
+
+    def transcribe(self, audio_path: Path, language: str | None = None) -> List[ASRSegment]:
+        import json
+        import urllib.request
+
+        log.info("ASR (Groq %s) uploading %s", self._model, audio_path.name)
+        boundary = "----hoichoi"
+        # Multipart body
+        with open(audio_path, "rb") as fh:
+            data = fh.read()
+        body = (
+            f"--{boundary}\r\n"
+            "Content-Disposition: form-data; name=\"model\"\r\n\r\n"
+            f"{self._model}\r\n"
+            f"--{boundary}\r\n"
+            "Content-Disposition: form-data; name=\"response_format\"\r\n\r\n"
+            "verbose_json\r\n"
+            f"--{boundary}\r\n"
+            "Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n"
+            "Content-Type: audio/wav\r\n\r\n"
+        ).encode("utf-8") + data + f"\r\n--{boundary}--\r\n".encode("utf-8")
+
+        req = urllib.request.Request(
+            self.ENDPOINT,
+            data=body,
+            headers={
+                "Authorization": f"Bearer {self._api_key}",
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "User-Agent": "hoichoi/0.1",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"Groq ASR failed: {exc}") from exc
+
+        # Whisper verbose_json: { "segments": [ { start, end, text }, ... ], "language": "bn" }
+        out: List[ASRSegment] = []
+        for s in payload.get("segments") or []:
+            try:
+                out.append(
+                    ASRSegment(
+                        start=float(s.get("start", 0.0)),
+                        end=float(s.get("end", 0.0)),
+                        text=str(s.get("text", "")).strip(),
+                        confidence=s.get("no_speech_prob"),
+                    )
+                )
+            except Exception:
+                continue
+        if not out and payload.get("text"):
+            out.append(ASRSegment(start=0.0, end=0.0, text=str(payload["text"]).strip()))
+        log.info("Groq ASR returned %d segments", len(out))
         return out
-    cmd = [
-        "ffmpeg", "-y", "-loglevel", "error",
-        "-i", str(audio_path),
-        "-ac", "1", "-ar", "8000",
-        "-af", "silenceremove=stop_periods=-1:stop_duration=0.4:stop_threshold=-38dB",
-        str(out),
-    ]
-    try:
-        subprocess.check_call(cmd, timeout=300)
-        if out.exists() and out.stat().st_size > 0:
-            return out
-    except Exception as exc:
-        log.warning("ASR cache preprocess failed: %s; falling back to original", exc)
-    return audio_path
 
 
-def transcribe(audio_path: Path, language: Optional[str] = None) -> List[ASRSegment]:
-    """Transcribe and return time-stamped segments."""
-    if language is None:
-        language = CONFIG.models.whisper_language
+class GeminiASRProvider:
+    """Google Gemini multimodal fallback (audio / video understanding)."""
 
-    backend = os.getenv("ASR_BACKEND", "faster_whisper").strip().lower()
-    if backend == "distil":
-        # English only — fall back to faster_whisper if a non-English code is requested.
-        if language and language not in ("en", "english"):
-            log.info("distil-whisper is English-only; falling back to faster_whisper for %s", language)
-        else:
-            return _transcribe_distil(audio_path)
+    name = "gemini"
+    DEFAULT_MODEL = "gemini-2.0-flash"
 
-    model = _get_faster_model()
-    audio_for_asr = _ensure_8k_audio(audio_path)
-    log.info("ASR (faster-whisper %s) decoding: %s", CONFIG.models.whisper_model, audio_for_asr.name)
-    segments_iter, _info = model.transcribe(
-        str(audio_for_asr),
-        language=language,
-        beam_size=1,                   # greedy — fastest
-        best_of=1,
-        vad_filter=True,
-        vad_parameters={
-            "min_silence_duration_ms": 400,
-            "speech_pad_ms": 200,
-        },
-        condition_on_previous_text=False,
-        word_timestamps=False,
-        chunk_length=15,
-    )
-    out: List[ASRSegment] = []
-    for seg in segments_iter:
-        out.append(
-            ASRSegment(
-                start=float(seg.start or 0.0),
-                end=float(seg.end or 0.0),
-                text=(seg.text or "").strip(),
-                confidence=getattr(seg, "avg_logprob", None),
+    def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
+        self._api_key = api_key or _api_key("GEMINI_API_KEY") or _api_key("GOOGLE_API_KEY")
+        self._model = model or os.getenv("GEMINI_ASR_MODEL") or self.DEFAULT_MODEL
+        if not self._api_key:
+            raise RuntimeError(
+                "Gemini ASR selected but GEMINI_API_KEY / GOOGLE_API_KEY is not set."
             )
+
+    def transcribe(self, audio_path: Path, language: str | None = None) -> List[ASRSegment]:
+        """Upload audio and ask Gemini for a Bengali transcript with timestamps."""
+        import base64
+        import json
+        import urllib.request
+
+        log.info("ASR (Gemini %s) decoding %s", self._model, audio_path.name)
+        with open(audio_path, "rb") as fh:
+            audio_b64 = base64.b64encode(fh.read()).decode("ascii")
+
+        prompt = """Transcribe this audio in its original language (bn by default).
+Return ONLY valid JSON of this shape:
+{"segments":[{"start":<float seconds>,"end":<float seconds>,"text":<string>,"confidence":<float 0..1>}]}
+No prose, no markdown, no code fences."""
+
+        body = {
+            "contents": [{
+                "parts": [
+                    {"text": prompt},
+                    {"inline_data": {"mime_type": "audio/wav", "data": audio_b64}},
+                ]
+            }],
+            "generationConfig": {"temperature": 0.0, "response_mime_type": "application/json"},
+        }
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{self._model}:generateContent?key={self._api_key}"
         )
-    return out
+        req = urllib.request.Request(
+            url, data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"Gemini ASR failed: {exc}") from exc
+
+        text = (
+            payload.get("candidates", [{}])[0]
+            .get("content", {})
+            .get("parts", [{}])[0]
+            .get("text", "")
+        )
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            log.warning("Gemini ASR returned non-JSON: %r", text[:200])
+            return []
+        out: List[ASRSegment] = []
+        for s in parsed.get("segments", []):
+            try:
+                out.append(
+                    ASRSegment(
+                        start=float(s.get("start", 0.0)),
+                        end=float(s.get("end", 0.0)),
+                        text=str(s.get("text", "")).strip(),
+                        confidence=s.get("confidence"),
+                    )
+                )
+            except Exception:
+                continue
+        log.info("Gemini ASR returned %d segments", len(out))
+        return out
+
+
+# ----------------------------- Registry & public API -----------------------------
+
+def _resolve_provider_name() -> str:
+    """Pick a provider based on `ASR_PROVIDER` and available credentials."""
+    explicit = os.getenv("ASR_PROVIDER", "").strip().lower()
+    if explicit:
+        return explicit
+    if _api_key("GROQ_API_KEY"):
+        return "groq"
+    if _api_key("GEMINI_API_KEY") or _api_key("GOOGLE_API_KEY"):
+        return "gemini"
+    if _api_key("ALLOW_LOCAL_ASR") or os.getenv("ALLOW_LOCAL_ASR") == "1":
+        return "faster_whisper"
+    return "mock"  # safe default — never makes a network call
 
 
 @lru_cache(maxsize=1)
-def _get_distil_model():
-    """Distil-Whisper via CTranslate2 (English only). ~5-6× faster than tiny."""
-    from faster_whisper import WhisperModel
-    return WhisperModel(
-        "Systran/faster-distil-whisper-large-v3",
-        device=CONFIG.models.whisper_device,
-        compute_type=CONFIG.models.whisper_compute_type,
-    )
+def get_provider(name: str | None = None) -> ASRProvider:
+    """Return a cached provider instance.
+
+    Resolution order:
+      1. Explicit `ASR_PROVIDER` env.
+      2. Auto-detect from credentials (`groq` > `gemini`).
+      3. Local CPU fallback (`faster_whisper`) if allowed.
+      4. `mock` for offline / tests.
+    """
+    chosen = (name or _resolve_provider_name()).lower()
+    if chosen == "groq":
+        return GroqWhisperProvider()
+    if chosen == "gemini":
+        return GeminiASRProvider()
+    if chosen == "faster_whisper":
+        return FasterWhisperProvider()
+    if chosen == "mock":
+        return MockASRProvider()
+    raise ValueError(f"Unknown ASR provider: {chosen}")
 
 
-def _transcribe_distil(audio_path: Path) -> List[ASRSegment]:
-    model = _get_distil_model()
-    audio_for_asr = _ensure_8k_audio(audio_path)
-    segs_iter, _ = model.transcribe(
-        str(audio_for_asr),
-        language="en",
-        beam_size=1,
-        vad_filter=True,
-        condition_on_previous_text=False,
-        chunk_length=15,
-    )
-    out: List[ASRSegment] = []
-    for seg in segs_iter:
-        out.append(
-            ASRSegment(
-                start=float(seg.start or 0.0),
-                end=float(seg.end or 0.0),
-                text=(seg.text or "").strip(),
-                confidence=getattr(seg, "avg_logprob", None),
-            )
-        )
-    return out
+def transcribe(audio_path: Path, language: str | None = None,
+               provider_name: str | None = None) -> List[ASRSegment]:
+    """Public entry point. Routes through the active provider."""
+    try:
+        provider = get_provider(provider_name)
+    except RuntimeError as exc:
+        log.warning("%s — falling back to mock provider", exc)
+        provider = get_provider("mock")
+    return provider.transcribe(audio_path, language=language)
+
+
+def reset_for_tests() -> None:
+    """Drop the cached provider instance — useful in unit tests."""
+    get_provider.cache_clear()

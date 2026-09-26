@@ -61,11 +61,32 @@ class PacingConfig:
 
 
 @dataclass(frozen=True)
+class ProviderConfig:
+    """Provider selection + model names. Never stores API keys.
+
+    Resolution order (per service):
+      1. Explicit env (e.g. `ASR_PROVIDER=groq`).
+      2. Auto-detect from credentials (`groq` > `gemini` > `faster_whisper`).
+      3. `mock` — never makes a network call. Safe default for sandboxed runs.
+
+    API keys are read directly via `os.getenv` by each provider at construction.
+    They are NEVER stored on this dataclass and NEVER logged.
+    """
+    # Vision
+    vision_provider: str = os.getenv("VISION_PROVIDER", "").strip().lower()
+    vision_model: str = os.getenv("VISION_MODEL", "gemini-2.0-flash")
+    # ASR
+    asr_provider: str = os.getenv("ASR_PROVIDER", "").strip().lower()
+    asr_fallback_provider: str = os.getenv("ASR_FALLBACK_PROVIDER", "mock").strip().lower()
+    # Allow the local CPU ASR fallback even when no cloud credentials present.
+    allow_local_asr: bool = _env_bool("ALLOW_LOCAL_ASR", False)
+    # Hugging Face token (only for gated HF model downloads).
+    hf_token: str = os.getenv("HF_TOKEN", "").strip()
+
+
+@dataclass(frozen=True)
 class ModelConfig:
-    # ────── ASR ──────
-    # `tiny` runs in ~RTF 0.2 on a CPU laptop (~75 MB quantized) and finishes a
-    # 40-minute Bengali drama in well under 2 minutes — the "3-5 minute E2E" spec.
-    # Bump to `base`/`small` if you have more time and want better Bengali accuracy.
+    # ────── ASR (local fallback only) ──────
     whisper_model: str = os.getenv("WHISPER_MODEL", "tiny")
     whisper_language: str = os.getenv("WHISPER_LANGUAGE", "bn")
     whisper_device: str = os.getenv("WHISPER_DEVICE", "cpu")
@@ -74,25 +95,15 @@ class ModelConfig:
     # ────── Keyframe budget ──────
     max_keyframes: int = _env_int("MAX_KEYFRAMES", 12)
 
-    # ────── Embeddings ──────
-    # Default is the no-nonsense 80 MB MiniLM. For true Bengali semantics, override
-    # with `shihab17/bangla-sentence-transformer` (XLM-R distilled, ~278 MB).
+    # ────── Embeddings (kept local — tiny CPU) ──────
     embedding_model: str = os.getenv(
         "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
     )
 
-    # ────── VLM (off by default for the 3-5 min demo) ──────
-    # SmolVLM-Instruct (256M) is the smallest credible VLM today, but cold-load
-    # + 12-keyframe inference routinely blows the demo budget. The default path
-    # uses *lexical fusion* (transcript tags + cheap VLM-style heuristics) which
-    # is plenty good enough for break decisions. Set `HF_MODEL_VLM` to a model
-    # name to re-enable, or `=` to keep it off explicitly.
+    # ────── HF VLM (local fallback only) ──────
     hf_vlm: str = os.getenv("HF_MODEL_VLM", "")
     vision_enabled: bool = os.getenv("HF_MODEL_VLM", "").strip() != ""
 
-    # ────── LLM rerank (optional) ──────
-    # Only if `USE_LLM=1`. We pick `flan-t5-small` (60M) – NOT a general chat LLM –
-    # to keep the "no general chat LLM" rule from the spec.
     use_llm: bool = _env_bool("USE_LLM", False)
     llm_model: str = os.getenv("HF_MODEL_LLM", "google/flan-t5-small")
 
@@ -101,6 +112,7 @@ class ModelConfig:
 class AppConfig:
     pacing: PacingConfig = field(default_factory=PacingConfig)
     models: ModelConfig = field(default_factory=ModelConfig)
+    providers: ProviderConfig = field(default_factory=ProviderConfig)
     storage_dir: Path = STORAGE_DIR
     project_root: Path = PROJECT_ROOT
 

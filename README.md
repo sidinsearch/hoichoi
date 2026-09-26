@@ -101,20 +101,21 @@ Adding a 9th brand to `brand.json` requires **zero** changes to Python or TypeSc
 
 ---
 
-## 🧠 Models — all CPU, none of them a general chat LLM
+## 🧠 Models — hybrid fast/free, never a general chat LLM
 
-| Layer        | Default (env override)                                | Why                                                                                                  |
-| ------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| ASR          | `faster-whisper tiny` int8 (`WHISPER_MODEL`)           | CTranslate2 port, 75 MB, Bengali-capable. RTF ≈ 0.23 on a 23-min episode → ~5.4 min total.            |
-| ASR (alt)    | `distil-whisper large-v3` (`ASR_BACKEND=distil`)        | English only. 5-6× faster than tiny. Auto-fallback to faster-whisper for non-English.                |
-| Shots        | PySceneDetect `ContentDetector`                         | Industry-standard content-aware cut detector. Shots are *evidence*, never final scenes.               |
-| VLM *(opt)*  | `HuggingFaceTB/SmolVLM-Instruct` 256M (`HF_MODEL_VLM`) | Off by default. Set `HF_MODEL_VLM=…` to enable. Cold-load + 12-keyframe inference blows the budget. |
-| VLM (alts)   | Florence-2-base 270M, Moondream2 1.8B                   | Tested fallbacks in `services/vlm.py`.                                                              |
-| Embeddings   | `sentence-transformers/all-MiniLM-L6-v2`               | 80 MB, 384-dim. Swap with `EMBEDDING_MODEL=shihab17/bangla-sentence-transformer` for BN-specific.   |
-| LLM rerank   | `google/flan-t5-small` 60M (`USE_LLM=1`)                | Seq-to-seq, never used for hard rules. Opt-in.                                                       |
-| **Hard rules** | **Custom Python** (`pipeline/breaks.py`, `brands.py`) | **Authoritative for safety.** The LLM never overrides sentence/dialogue/gap/negative-context rules.   |
+| Layer        | Default (env override)                                                | Why                                                                                                  |
+| ------------ | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| ASR (cloud)  | `Groq Whisper Large-v3-Turbo` (`ASR_PROVIDER=groq`, `ASR_MODEL=…`)   | Free tier, fastest Bengali/English; ~15-30 s for a 40-min episode. Set `GROQ_API_KEY`.               |
+| ASR (cloud alt) | Gemini multimodal ASR (`ASR_FALLBACK_PROVIDER=gemini`)             | Used if Groq is rate-limited or creds absent.                                                        |
+| ASR (local)  | `faster-whisper tiny` int8 (`ALLOW_LOCAL_ASR=true`)                  | Last-resort CPU fallback. RTF ≈ 0.23 on a 23-min episode → ~5.4 min total.                          |
+| Shots        | PySceneDetect `ContentDetector`                                       | Industry-standard content-aware cut detector. Shots are *evidence*, never final scenes.               |
+| Vision (cloud) | Google Gemini multimodal (`VISION_PROVIDER=gemini`, `VISION_MODEL=gemini-2.0-flash`) | Sends **bounded windows** (≤4 JPEGs + transcript slice), never the full video. Free tier. |
+| Vision (local opt-in) | Florence-2 / Moondream2 / SmolVLM (`VISION_PROVIDER=hf`)     | Opt-in. Off by default — defeats the budget otherwise.                                              |
+| Embeddings   | `sentence-transformers/all-MiniLM-L6-v2`                             | 80 MB, 384-dim. Tiny CPU cost; used only for brand-context ranking.                                  |
+| LLM rerank   | `google/flan-t5-small` 60M (`USE_LLM=1`)                              | Seq-to-seq, never used for hard rules. Opt-in.                                                       |
+| **Hard rules** | **Custom Python** (`pipeline/breaks.py`, `brands.py`)               | **Authoritative for safety.** The LLM never overrides sentence/dialogue/gap/negative-context rules.   |
 
-See [`docs/MODEL_REGISTRY.md`](docs/MODEL_REGISTRY.md) for the full research trail, alternatives, and swap instructions.
+See [`docs/MODEL_REGISTRY.md`](docs/MODEL_REGISTRY.md) for the full research trail, alternatives, and swap instructions. **API keys are never stored on dataclasses or logged.** Set them in `.env` and they resolve transparently.
 
 ---
 

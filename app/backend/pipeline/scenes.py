@@ -24,7 +24,7 @@ from ..models.schemas import (
     SceneContext,
     Shot,
 )
-from ..services.vlm import describe_image
+from ..services.vlm import describe_image, describe_scene_window
 
 
 def _transcript_for_range(
@@ -64,6 +64,11 @@ def build_scenes(
                 confidence=0.3,
             )
         ]
+
+    # 0. Build bounded scene windows BEFORE per-shot work, so we can ask the
+    # provider to summarize a *window* (≤4 frames + transcript slice) rather
+    # than hammer it per-keyframe — this is the hybrid-fast path.
+    scene_windows: List[List[Path]] = _build_scene_windows(shots, keyframes, scenes_fallback=None)
 
     # 1. Annotate shots with VLM-based observations (lazy — only keyframes near shot midpoint)
     obs_per_shot: Dict[int, SceneContext] = {}
@@ -202,3 +207,41 @@ def _cheap_tags_from_text(text: str) -> List[str]:
             seen.add(t)
             out.append(t)
     return out
+
+
+def _build_scene_windows(
+    shots: List[Shot],
+    keyframes: List[KeyFrame],
+    scenes_fallback=None,
+) -> List[List[Path]]:
+    """Pre-allocate up to 4 keyframe paths per scene window.
+
+    The orchestrator passes these to `describe_scene_window(...)` so the cloud
+    provider gets a *bounded* packet (≤4 frames + transcript slice), not the
+    full video. Hard rules stay in Python; the cloud only summarizes context.
+    """
+    if not shots:
+        return []
+    windows: List[List[Path]] = []
+    cur_frames: List[Path] = []
+    cur_window_start = shots[0].start
+    for sh in shots:
+        mid_kf = None
+        mid_dt = float("inf")
+        for kf in keyframes:
+            dt = abs(kf.timestamp - (sh.start + sh.end) / 2)
+            if dt < mid_dt:
+                mid_dt = dt
+                mid_kf = kf
+        if mid_kf is None:
+            continue
+        if (sh.start - cur_window_start) > 60 or len(cur_frames) >= 4:
+            if cur_frames:
+                windows.append(cur_frames)
+            cur_frames = [Path(mid_kf.path)]
+            cur_window_start = sh.start
+        else:
+            cur_frames.append(Path(mid_kf.path))
+    if cur_frames:
+        windows.append(cur_frames)
+    return windows
