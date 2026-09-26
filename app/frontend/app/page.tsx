@@ -148,7 +148,7 @@ export default function Page() {
     <>
       <Header />
       <main className="app-shell">
-        <section id="demo" className="mx-auto max-w-[1400px] px-6 pb-24 pt-16 lg:px-10">
+        <section id="demo" className="mx-auto max-w-6xl px-6 pb-24 pt-16 lg:px-10">
           <div className="demo-heading mb-12 mx-auto text-center">
             <div className="section-kicker justify-center flex items-center"><span className="status-live" />Live demo · deterministic ad placement</div>
             <h1 className="mt-4">Turn long-form video into <br /><em>safe ad moments.</em></h1>
