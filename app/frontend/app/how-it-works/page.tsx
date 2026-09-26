@@ -19,15 +19,15 @@ const STEPS = [
     num: "02",
     icon: "🎙",
     color: "rgba(99,102,241,.12)",
-    title: "Transcribe audio",
-    body: "Audio is split into 5-minute chunks locally. Groq Whisper Large-v3-Turbo transcribes each chunk with timestamps. If Groq is unavailable, Gemini multimodal ASR takes over, then optionally local faster-whisper (opt-in). Bengali is default; auto-detect and 10 other language hints are supported.",
+    title: "Transcribe & Translate",
+    body: "Audio is split into 5-minute chunks locally. Groq Whisper Large-v3-Turbo transcribes each chunk. If Groq is unavailable, local faster-whisper takes over deterministically. Bengali transcripts are automatically translated to English to maximize brand-context matching accuracy.",
   },
   {
     num: "03",
     icon: "🔍",
     color: "rgba(52,211,153,.12)",
     title: "Understand visually",
-    body: "For each bounded scene window (≤4 keyframes + ≤1000 chars of transcript), a single Gemini call returns context tags such as 'outdoor market', 'emotional dialogue', or 'comedy'. The full video is never uploaded to any cloud model.",
+    body: "A resilient multi-tier fallback chain (Gemini 3.5 → OpenAI gpt-4o-mini → Local VLM → Pixel Analysis) extracts visual context. If an API quota trips, the system instantly latches to the next provider. The deterministic Pixel fallback ensures it never crashes and never hallucinates.",
   },
   {
     num: "04",
@@ -122,8 +122,8 @@ export default function HowItWorksPage() {
                │  bounded windows only
        ┌───────┴──────────┐
        ▼                  ▼
- Groq Whisper       Gemini Vision
- (audio chunks)     (≤4 JPEGs + text)
+ Groq / Local       Gemini / OpenAI
+ Whisper ASR        or Pixel Fallback
        │                  │
        └───────┬──────────┘
                ▼
