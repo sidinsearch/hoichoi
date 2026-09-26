@@ -148,22 +148,22 @@ export default function Page() {
     <>
       <Header />
       <main className="app-shell">
-        <section id="demo" className="mx-auto max-w-7xl px-6 pb-24 pt-16 lg:px-10">
-          <div className="demo-heading mb-12">
-            <div className="section-kicker"><span className="status-live" />Live demo · deterministic ad placement</div>
-            <h1 className="mt-5">Turn long-form video into <em>safe ad moments.</em></h1>
-            <p className="mt-5 max-w-2xl">Select a bundled episode or upload your own. The system analyzes scenes, applies safety rules, matches brands, and gives you a playable result.</p>
+        <section id="demo" className="mx-auto max-w-[1400px] px-6 pb-24 pt-16 lg:px-10">
+          <div className="demo-heading mb-12 mx-auto text-center">
+            <div className="section-kicker justify-center flex items-center"><span className="status-live" />Live demo · deterministic ad placement</div>
+            <h1 className="mt-4">Turn long-form video into <br /><em>safe ad moments.</em></h1>
+            <p className="mt-5 max-w-2xl mx-auto">Select a bundled episode or upload your own. The system analyzes scenes, applies safety rules, matches brands, and gives you a playable result.</p>
           </div>
           <div className="workspace">
             <div className="workspace-column">
-              <div className="panel-topline"><span className="panel-number">01 / INPUT</span><span className="text-xs text-white/35">Video + brand rules</span></div>
+              <div className="panel-topline"><span className="panel-number">01 / INPUT</span></div>
               <BrandPicker disabled={isLoading} onChange={setBrandFile} />
               <ResourcePicker onAnalyze={analyzeResource} language={language} onLanguageChange={setLanguage} disabled={isLoading} />
-              <div className="flex items-center gap-3 px-1 text-[10px] uppercase tracking-[.2em] text-white/30"><span className="h-px flex-1 bg-white/10" />or upload<span className="h-px flex-1 bg-white/10" /></div>
+              <div className="flex items-center gap-3 px-1 text-[10px] uppercase tracking-[.2em] text-[var(--text-2)]"><span className="h-px flex-1 bg-white/10" />or upload<span className="h-px flex-1 bg-white/10" /></div>
               <UploadPanel onAnalyze={analyze} disabled={isLoading} loading={isLoading} />
             </div>
             <div className="workspace-column workspace-results">
-              <div className="panel-topline"><span className="panel-number">02 / RESULTS</span><span className="text-xs text-white/35">Playback + artifacts</span></div>
+              <div className="panel-topline"><span className="panel-number">02 / RESULTS</span></div>
               {jobId && <ResultsPanel status={status} stage={stage} progress={progress} summary={status === "completed" ? { scenes: scenes.length, candidates: breaks.length, accepted: breaks.length, rejected: 0 } : undefined} />}
               {isLoading && <ProgressPanel stages={STAGES} current={stage} />}
               {error && <div className="card border border-rose/30 bg-rose/10 p-4 text-sm text-rose"><span className="font-semibold">Error:</span> {error}</div>}
