@@ -51,7 +51,8 @@ htmlcov/
 
 # Large VLM/Whisper model caches
 .models/
-models/
+/models/
+
 *.bin
 *.gguf
 
