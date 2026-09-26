@@ -4,10 +4,9 @@ import { useEffect, useState } from "react";
 import { useRef } from "react";
 
 import Header from "@/components/Header";
-import Hero from "@/components/Hero";
-import HowItWorks from "@/components/HowItWorks";
 import UploadPanel from "@/components/UploadPanel";
 import ResourcePicker from "@/components/ResourcePicker";
+import BrandPicker from "@/components/BrandPicker";
 import ResultsPanel from "@/components/ResultsPanel";
 import ArtifactCards from "@/components/ArtifactCards";
 import VideoPlayer from "@/components/VideoPlayer";
@@ -44,6 +43,7 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [lastTriggeredBreak, setLastTriggeredBreak] = useState<BreakInfo | null>(null);
   const [language, setLanguage] = useState("bn");
+  const [brandFile, setBrandFile] = useState<File | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const resetAnalysis = () => { setStatus("queued"); setStage("uploading"); setProgress(2); setBreaks([]); setError(null); setScenes([]); setVideoUrl(null); };
@@ -52,6 +52,7 @@ export default function Page() {
     resetAnalysis();
     const fd = new FormData();
     fd.append("resource_name", resourceName); fd.append("brand_name", "brands.json"); fd.append("language", selectedLanguage);
+    if (brandFile) fd.append("brand_json", brandFile);
     try {
       const r = await fetch("/api/analyze-resource", { method: "POST", body: fd });
       if (!r.ok) throw new Error(`Resource analysis failed: ${r.status}`);
@@ -59,10 +60,13 @@ export default function Page() {
     } catch (e: any) { setError(e?.message ?? "Resource analysis failed"); setStatus("failed"); }
   };
 
-  const analyze = async (video: File, brandJson: File, language: string) => {
+  const analyze = async (video: File, language: string) => {
     const fd = new FormData();
     fd.append("video", video);
-    fd.append("brand_json", brandJson);
+    if (brandFile) fd.append("brand_json", brandFile); else {
+      const defaultBrand = await fetch("/api/resources/brands.json").then(r => r.blob());
+      fd.append("brand_json", new File([defaultBrand], "brands.json", { type: "application/json" }));
+    }
     fd.append("language", language);
 
     try {
@@ -144,86 +148,23 @@ export default function Page() {
     <>
       <Header />
       <main>
-        <Hero />
-        <HowItWorks />
-
-        <section id="demo" className="mx-auto max-w-7xl px-6 pb-20">
+        <section id="demo" className="mx-auto max-w-5xl px-6 pb-20 pt-12">
           <div className="mb-8">
-            <h2 className="text-3xl font-bold tracking-tight">Demo</h2>
-            <p className="mt-2 text-sm text-white/60">
-              Choose a bundled episode or upload your own video and brand catalogue. The pipeline runs end-to-end and keeps every decision inspectable.
-            </p>
+            <div className="section-kicker">Analysis workspace</div>
+            <h1 className="mt-3 text-4xl font-semibold tracking-tight">Find safe moments for ads.</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/50">Choose a library video or upload your own. Use the default catalogue or upload a custom brand JSON.</p>
           </div>
-
-          <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
-            <div className="grid gap-6">
-              <ResourcePicker onAnalyze={analyzeResource} language={language} onLanguageChange={setLanguage} disabled={isLoading} />
-              <div className="flex items-center gap-3 text-xs uppercase tracking-widest text-white/30"><span className="h-px flex-1 bg-white/10" />or upload your own<span className="h-px flex-1 bg-white/10" /></div>
-              <UploadPanel onAnalyze={analyze} disabled={isLoading} loading={isLoading} />
-              {jobId && (
-                <ResultsPanel
-                  status={status}
-                  stage={stage}
-                  progress={progress}
-                  summary={
-                    status === "completed"
-                      ? {
-                          scenes: scenes.length,
-                          candidates: breaks.length,
-                          accepted: breaks.length,
-                          rejected: 0,
-                        }
-                      : undefined
-                  }
-                />
-              )}
-              {(isLoading) && <ProgressPanel stages={STAGES} current={stage} />}
-              {error && (
-                <div className="card border border-rose/30 bg-rose/10 p-4 text-sm text-rose">
-                  <span className="font-semibold">Error:</span> {error}
-                </div>
-              )}
-              {status === "completed" && videoUrl && (
-                <>
-                  <VideoPlayer
-                    src={videoUrl}
-                    breaks={breaks}
-                    onBreakTriggered={(b) => setLastTriggeredBreak(b)}
-                  />
-                  <BreakDetails breaks={breaks} scenes={scenes} />
-                  <TranscriptPanel scenes={scenes} breaks={breaks} />
-                </>
-              )}
-            </div>
-
-            <aside className="grid gap-6 lg:sticky lg:top-24 lg:h-fit">
-              <div className="card p-5">
-                <div className="text-[11px] uppercase tracking-widest text-white/40">Connection</div>
-                <div className="mt-1 flex items-center gap-2 text-sm">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                  <span className="text-white/80">Backend online</span>
-                </div>
-                <div className="mt-3 text-xs text-white/40">
-                  POST /api/analyze · GET /api/jobs/{`{id}`}
-                </div>
-              </div>
-
-              <div id="artifacts" className="grid gap-4">
-                <div className="text-[11px] uppercase tracking-widest text-white/40">Artifacts</div>
-                <ArtifactCards artifacts={artifacts} />
-              </div>
-
-              {lastTriggeredBreak && (
-                <div className="card p-5">
-                  <div className="text-[11px] uppercase tracking-widest text-rose">Now playing</div>
-                  <div className="mt-1 text-lg font-bold">{lastTriggeredBreak.display_name}</div>
-                  <div className="text-sm text-white/60">{lastTriggeredBreak.category}</div>
-                  <p className="mt-3 rounded-md bg-white/5 p-3 text-xs italic text-white/70">
-                    "{lastTriggeredBreak.context_summary}"
-                  </p>
-                </div>
-              )}
-            </aside>
+          <div className="grid gap-4">
+            <BrandPicker disabled={isLoading} onChange={setBrandFile} />
+            <ResourcePicker onAnalyze={analyzeResource} language={language} onLanguageChange={setLanguage} disabled={isLoading} />
+            <div className="flex items-center gap-3 text-xs uppercase tracking-widest text-white/30"><span className="h-px flex-1 bg-white/10" />or upload your own video<span className="h-px flex-1 bg-white/10" /></div>
+            <UploadPanel onAnalyze={analyze} disabled={isLoading} loading={isLoading} />
+            {jobId && <ResultsPanel status={status} stage={stage} progress={progress} summary={status === "completed" ? { scenes: scenes.length, candidates: breaks.length, accepted: breaks.length, rejected: 0 } : undefined} />}
+            {isLoading && <ProgressPanel stages={STAGES} current={stage} />}
+            {error && <div className="card border border-rose/30 bg-rose/10 p-4 text-sm text-rose"><span className="font-semibold">Error:</span> {error}</div>}
+            {status === "completed" && videoUrl && <><VideoPlayer src={videoUrl} breaks={breaks} onBreakTriggered={b => setLastTriggeredBreak(b)} /><BreakDetails breaks={breaks} scenes={scenes} /><TranscriptPanel scenes={scenes} breaks={breaks} /></>}
+            {lastTriggeredBreak && <div className="card p-5"><div className="section-kicker">Now playing</div><div className="mt-1 text-lg font-semibold">{lastTriggeredBreak.display_name}</div><p className="mt-2 text-sm text-white/55">{lastTriggeredBreak.context_summary}</p></div>}
+            {jobId && <div id="artifacts" className="grid gap-3"><div className="section-kicker">Artifacts</div><ArtifactCards artifacts={artifacts} /></div>}
           </div>
         </section>
       </main>

@@ -46,18 +46,31 @@ def resource(name: str):
 
 
 @router.post("/analyze-resource")
-async def analyze_resource(resource_name: str = Form(...), brand_name: str = Form("brands.json"), language: str = Form("bn")):
+async def analyze_resource(
+    resource_name: str = Form(...),
+    brand_name: str = Form("brands.json"),
+    language: str = Form("bn"),
+    brand_json: UploadFile | None = File(None),
+):
     video_path = _safe_resource(resource_name)
-    brand_path = _safe_resource(brand_name)
-    if video_path.suffix.lower() not in _RESOURCE_EXTENSIONS or brand_path.name != "brands.json":
-        raise HTTPException(status_code=400, detail="Choose a resource video and brands.json")
+    if video_path.suffix.lower() not in _RESOURCE_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Choose a resource video")
+    if brand_json is not None:
+        brand_bytes = await brand_json.read()
+        if not brand_json.filename or not brand_json.filename.lower().endswith(".json"):
+            raise HTTPException(status_code=400, detail="Custom brand file must be JSON")
+    else:
+        brand_path = _safe_resource(brand_name)
+        if brand_path.name != "brands.json":
+            raise HTTPException(status_code=400, detail="Choose brands.json")
+        brand_bytes = brand_path.read_bytes()
     job_id = new_job_id()
     job_dir = CONFIG.storage_dir / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
     stored_video = job_dir / video_path.name
     stored_brand = job_dir / "brands.uploaded.json"
     stored_video.symlink_to(video_path)
-    stored_brand.write_bytes(brand_path.read_bytes())
+    stored_brand.write_bytes(brand_bytes)
     status, stored_video, stored_brand = create_job(stored_video, stored_brand, job_dir)
     launch_in_background(job_id, stored_video, stored_brand, job_dir, status, language=language)
     return {"job_id": job_id, "status": status.status}

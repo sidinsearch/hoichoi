@@ -32,9 +32,8 @@ export default function Header() {
           </div>
         </div>
         <nav className="hidden items-center gap-7 text-sm md:flex">
-          <a href="#work" className="nav-link">How it works</a>
+          <a href="/how-it-works" className="nav-link">How it works</a>
           <a href="#demo" className="nav-link">Demo</a>
-          <a href="#artifacts" className="nav-link">Artifacts</a>
           <a
             href="https://github.com/sidinsearch/hoichoi"
             target="_blank" rel="noreferrer"
