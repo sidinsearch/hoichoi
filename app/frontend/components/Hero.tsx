@@ -2,67 +2,28 @@
 
 export default function Hero() {
   return (
-    <section className="hero-bg relative overflow-hidden border-b border-white/5">
-      <div className="mx-auto max-w-7xl px-6 pb-16 pt-20 md:pt-28">
-        <div className="grid items-center gap-10 md:grid-cols-[1.2fr_1fr]">
-          <div>
-            <span className="chip mb-6 inline-flex">
-              <span className="h-1.5 w-1.5 rounded-full bg-rose pulse" />
-              Live demo · no GPU required
-            </span>
-            <h1 className="text-5xl font-bold leading-[1.05] tracking-tight md:text-6xl">
-              <span className="glow-text">Understand the story.</span>
-              <br />
-              <span className="text-white/90">Pick the right moment.</span>
-              <br />
-              <span className="text-white/60">Place a brand that fits.</span>
-            </h1>
-            <p className="mt-6 max-w-xl text-base leading-relaxed text-white/60">
-              A semantic pipeline that turns a long-form Bengali drama into a clean
-              ad-break schedule — without ever modifying the source video. Where to
-              cut, whether to cut, and what to show. Driven by ASR + vision + audio
-              signals. Anchored by deterministic safety rules.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <a href="#demo" className="btn-primary rounded-xl px-5 py-3 text-sm">
-                Run the demo
-              </a>
-              <a href="#how" className="btn-ghost rounded-xl px-5 py-3 text-sm">
-                How it works
-              </a>
-              <div className="ml-1 flex items-center gap-2 text-xs text-white/40">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                v0.1.0 · backend online
-              </div>
-            </div>
+    <section className="hero-shell">
+      <div className="mx-auto grid max-w-7xl gap-10 px-6 pb-14 pt-14 lg:grid-cols-[minmax(0,1.05fr)_420px] lg:items-end lg:pt-20">
+        <div>
+          <div className="eyebrow"><span className="status-live" /> Hackathon demo · context-aware ad intelligence</div>
+          <h1 className="hero-title mt-5 max-w-4xl">Place ads at the moment<br /><span>the story can carry them.</span></h1>
+          <p className="hero-copy mt-5 max-w-2xl">Analyze long-form video, find safe scene boundaries, match a brand from data, and preview the result without changing the source file.</p>
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <a href="#demo" className="btn-primary rounded-lg px-5 py-3 text-sm">Open analysis workspace <span aria-hidden>→</span></a>
+            <a href="#how" className="btn-ghost rounded-lg px-5 py-3 text-sm">Read the method</a>
           </div>
-
-          <div className="card relative p-6 shadow-2xl">
-            <div className="absolute -top-px left-6 right-6 h-px bg-gradient-to-r from-transparent via-rose to-transparent" />
-            <div className="mb-4 flex items-center justify-between">
-              <div className="text-xs uppercase tracking-widest text-white/40">Pipeline at a glance</div>
-              <span className="chip text-emerald-300">no chat LLM</span>
-            </div>
-            <ol className="grid gap-3 text-sm">
-              {[
-                ["01", "ASR (bn)", "faster-whisper"],
-                ["02", "Shots", "PySceneDetect"],
-                ["03", "Keyframes", "ffmpeg + VLM (optional)"],
-                ["04", "Scenes", "multimodal fusion"],
-                ["05", "Breaks", "deterministic rules"],
-                ["06", "Brands", "MiniLM + hard blocks"],
-                ["07", "VMAP", "scene-bound ad schedule"],
-              ].map(([k, name, sub]) => (
-                <li key={k} className="flex items-center justify-between rounded-lg bg-white/[0.03] px-3 py-2">
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-[11px] text-rose">{k}</span>
-                    <span className="font-medium text-white">{name}</span>
-                  </div>
-                  <span className="text-xs text-white/40">{sub}</span>
-                </li>
-              ))}
-            </ol>
+        </div>
+        <div className="hero-proof">
+          <div className="flex items-center justify-between border-b border-white/10 pb-4">
+            <span className="eyebrow">Decision contract</span>
+            <span className="proof-pill">deterministic</span>
           </div>
+          <div className="grid grid-cols-3 gap-4 pt-5">
+            <div><div className="proof-value">120s</div><div className="proof-label">minimum gap</div></div>
+            <div><div className="proof-value">15%</div><div className="proof-label">ad-load ceiling</div></div>
+            <div><div className="proof-value">4/h</div><div className="proof-label">break cap</div></div>
+          </div>
+          <p className="mt-5 text-xs leading-5 text-white/45">Cloud models describe audio and bounded frames. Local rules make the final placement decision.</p>
         </div>
       </div>
     </section>

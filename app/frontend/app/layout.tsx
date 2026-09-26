@@ -4,8 +4,7 @@ import type { Metadata, Viewport } from "next";
 export const metadata: Metadata = {
   title: "hoichoi · Context-Aware Ad Intelligence",
   description:
-    "Semantic scene segmentation, safe break scoring, and brand-safe placement for Bengali drama — never modifying the source video.",
-  themeColor: "#07060c",
+    "Semantic scene segmentation, safe break scoring, and brand-safe placement for long-form video — never modifying the source.",
 };
 
 export const viewport: Viewport = {

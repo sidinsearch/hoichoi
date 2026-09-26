@@ -6,7 +6,6 @@ import { useRef } from "react";
 import Header from "@/components/Header";
 import Hero from "@/components/Hero";
 import HowItWorks from "@/components/HowItWorks";
-import FeatureGrid from "@/components/FeatureGrid";
 import UploadPanel from "@/components/UploadPanel";
 import ResourcePicker from "@/components/ResourcePicker";
 import ResultsPanel from "@/components/ResultsPanel";
@@ -146,15 +145,13 @@ export default function Page() {
       <Header />
       <main>
         <Hero />
-        <FeatureGrid />
         <HowItWorks />
 
         <section id="demo" className="mx-auto max-w-7xl px-6 pb-20">
           <div className="mb-8">
             <h2 className="text-3xl font-bold tracking-tight">Demo</h2>
             <p className="mt-2 text-sm text-white/60">
-              Upload a Bengali drama + the synthetic brand catalogue. The pipeline
-              will run end-to-end and stream live progress.
+              Choose a bundled episode or upload your own video and brand catalogue. The pipeline runs end-to-end and keeps every decision inspectable.
             </p>
           </div>
 
