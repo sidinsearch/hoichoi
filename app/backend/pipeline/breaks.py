@@ -12,6 +12,7 @@ from ..config import CONFIG
 from ..models.schemas import (
     AcceptedBreak,
     BreakSignals,
+    BrandDecision,
     Candidate,
     HardConstraints,
     Scene,
@@ -266,12 +267,23 @@ def select_final_breaks(
             continue
         counter += 1
         brand, creative, context_summary = selected_brands[c.candidate_id]
+        # brand here is the JSON-loaded `Brand` model; AcceptedBreak expects
+        # the slimmer `BrandDecision` shape. Map explicitly so the contract
+        # stays strict.
+        decision = BrandDecision(
+            brand_id=brand.brand_id,
+            display_name=brand.display_name,
+            category=brand.category,
+            semantic_score=c.score,
+            eligible=True,
+            blocked_by=[],
+        )
         out.append(
             AcceptedBreak(
                 break_id=f"break_{counter:03d}",
                 timestamp_sec=c.timestamp_sec,
                 duration_sec=creative.duration_sec,
-                brand=brand,
+                brand=decision,
                 creative=creative,
                 score=c.score,
                 scene_id=c.scene_id,
