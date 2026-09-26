@@ -48,10 +48,13 @@ export default function VideoPlayer({ src, breaks, onBreakTriggered }: Props) {
           window.clearInterval(intervalRef.current);
           intervalRef.current = null;
         }
-        const resumeAt = adResumeTimeRef.current ?? 0;
+        // adResumeTimeRef is a ref so always has the live value even in stale closure
+        const resumeAt = adResumeTimeRef.current;
         const video = ref.current;
-        if (video) {
+        if (video && resumeAt !== null) {
           video.currentTime = resumeAt;
+          video.play().catch(() => undefined);
+        } else if (video) {
           video.play().catch(() => undefined);
         }
         adResumeTimeRef.current = null;

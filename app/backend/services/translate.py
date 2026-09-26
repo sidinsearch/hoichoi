@@ -16,7 +16,7 @@ from typing import List
 
 log = logging.getLogger(__name__)
 
-_MODEL = os.getenv("TRANSLATE_MODEL", "gemini-2.5-flash-lite")
+_MODEL = os.getenv("TRANSLATE_MODEL", "gemini-3.5-flash-lite")
 _MAX_SEGMENTS = int(os.getenv("TRANSLATE_MAX_SEGMENTS", "0") or 0)  # 0 = all
 _BATCH = 40
 
