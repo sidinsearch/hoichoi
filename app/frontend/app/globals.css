@@ -137,7 +137,12 @@ button, a, select, input { min-height: 44px; }
 
 /* ─── Workspace 2-col ───────────────────────────────── */
 .workspace { display: grid; grid-template-columns: minmax(0,380px) minmax(0,1fr); gap: 24px; align-items: start; }
-.workspace-col { display: grid; gap: 14px; }
+.workspace-column { display: grid; gap: 14px; min-width: 0; }
+.workspace-results { align-content: start; }
+.workspace-results > * { min-width: 0; }
+.results-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.results-grid .wide { grid-column: 1 / -1; }
+@media (max-width: 520px) { .results-grid { grid-template-columns: 1fr; } .results-grid .wide { grid-column: auto; } }
 @media (max-width: 960px) { .workspace { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .workspace { gap: 12px; } .page-title { font-size: 2.5rem; } }
 

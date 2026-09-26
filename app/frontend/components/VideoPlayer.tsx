@@ -25,9 +25,18 @@ export default function VideoPlayer({ src, breaks, onBreakTriggered }: Props) {
   const [now, setNow] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
   const intervalRef = useRef<number | null>(null);
+  const adIdRef = useRef<string | null>(null);
+  const adStartedAtRef = useRef<number | null>(null);
+  const adResumeTimeRef = useRef<number | null>(null);
+  const [, forceAdTick] = useState(0);
 
   useEffect(() => {
     consumed.current = new Set();
+    adIdRef.current = null;
+    adStartedAtRef.current = null;
+    adResumeTimeRef.current = null;
+    if (intervalRef.current) window.clearInterval(intervalRef.current);
+    intervalRef.current = null;
   }, [src]);
 
   const tickAd = useCallback(() => {
@@ -38,33 +47,45 @@ export default function VideoPlayer({ src, breaks, onBreakTriggered }: Props) {
           window.clearInterval(intervalRef.current);
           intervalRef.current = null;
         }
+        const resumeAt = adResumeTimeRef.current ?? 0;
+        const video = ref.current;
+        if (video) {
+          video.currentTime = resumeAt;
+          video.play().catch(() => undefined);
+        }
+        adResumeTimeRef.current = null;
+        adIdRef.current = null;
         setPhase("playing");
         setActiveAd(null);
-        setTimeout(() => ref.current?.play().catch(() => undefined), 80);
       }
       return next;
     });
   }, []);
 
   useEffect(() => {
-    if (phase === "ad" && activeAd) {
-      const v = ref.current;
-      if (v) {
-        v.pause();
-        v.currentTime = activeAd.timestamp_sec;
-      }
-      setRemaining(activeAd.duration_sec);
-      consumed.current.add(activeAd.id);
-      onBreakTriggered?.(activeAd);
-      if (intervalRef.current) window.clearInterval(intervalRef.current);
-      intervalRef.current = window.setInterval(tickAd, 1000);
-      return () => {
-        if (intervalRef.current) {
-          window.clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-      };
+    if (phase !== "ad" || !activeAd || adIdRef.current === activeAd.id) return;
+    const v = ref.current;
+    if (v) {
+      v.pause();
+      v.currentTime = activeAd.timestamp_sec;
     }
+    adIdRef.current = activeAd.id;
+    adStartedAtRef.current = Date.now();
+    adResumeTimeRef.current = activeAd.timestamp_sec;
+    setRemaining(activeAd.duration_sec);
+    consumed.current.add(activeAd.id);
+    onBreakTriggered?.(activeAd);
+    if (intervalRef.current) window.clearInterval(intervalRef.current);
+    intervalRef.current = window.setInterval(() => {
+      forceAdTick((n) => n + 1);
+      tickAd();
+    }, 1000);
+    return () => {
+      if (intervalRef.current) {
+        window.clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
   }, [phase, activeAd, tickAd, onBreakTriggered]);
 
   const onTime = useCallback(() => {

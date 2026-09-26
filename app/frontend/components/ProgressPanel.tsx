@@ -21,12 +21,18 @@ export default function ProgressPanel({ stages, current, progress = 0 }: Props) 
   const idx = Math.max(0, stages.indexOf(current));
   const pct = Math.max(0, Math.min(100, Math.round(progress)));
   return (
-    <div className="card p-6">
-      <div className="mb-3 flex items-center justify-between text-xs text-white/50">
-        <span className="uppercase tracking-widest">Pipeline stages</span>
-        <span className="font-mono text-white/70">{LABELS[current] ?? current}</span>
+    <div className="card p-5">
+      <div className="mb-4 flex items-end justify-between gap-3">
+        <div>
+          <div className="text-[10px] uppercase tracking-[.16em] text-white/40">Processing</div>
+          <div className="mt-1 font-mono text-2xl font-bold leading-none text-white">{pct}%</div>
+        </div>
+        <div className="text-right">
+          <div className="text-[10px] uppercase tracking-[.16em] text-white/40">Current step</div>
+          <div className="mt-1 max-w-[190px] truncate text-xs text-rose" title={LABELS[current] ?? current}>{LABELS[current] ?? current}</div>
+        </div>
       </div>
-      <div className="mb-5 h-1.5 overflow-hidden rounded-full bg-white/5">
+      <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-white/5">
         <div
           className="h-full rounded-full"
           style={{
@@ -36,10 +42,7 @@ export default function ProgressPanel({ stages, current, progress = 0 }: Props) 
           }}
         />
       </div>
-      <div className="mb-4 flex items-center justify-between text-xs text-white/50">
-        <span>Processing</span><span className="font-mono text-lg font-bold text-white">{Math.round(pct)}%</span>
-      </div>
-      <ul className="grid gap-1.5 text-sm">
+      <ul className="grid gap-1.5 text-xs">
         {stages.map((s, i) => {
           const state = i < idx ? "done" : i === idx ? "active" : "todo";
           return (
@@ -49,7 +52,7 @@ export default function ProgressPanel({ stages, current, progress = 0 }: Props) 
                 {state === "done" ? "✓" : state === "active" ? "●" : "○"}
               </span>
               <span className={state === "active" ? "text-white" : state === "done" ? "text-white/70" : "text-white/40"}>
-                {s}
+                {LABELS[s] ?? s}
               </span>
             </li>
           );

@@ -21,13 +21,13 @@ export default function ResultsPanel(props: Props) {
   const done = status === "completed";
   const failed = status === "failed";
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="results-grid">
       <Stat label="Status" value={status.toUpperCase()} accent={failed ? "text-rose" : done ? "text-emerald-400" : "text-amber-300"} />
       <Stat label="Progress" value={progress != null ? `${Math.round(progress)}%` : "—"} />
       <Stat label="Scenes" value={summary?.scenes ?? "—"} />
       <Stat label="Accepted" value={summary?.accepted ?? "—"} accent={(summary?.accepted ?? 0) > 0 ? "text-emerald-400" : undefined} />
       {stage && (
-        <div className="col-span-2 card px-4 py-3">
+        <div className="wide card px-4 py-3">
           <div className="mb-1 text-xs uppercase tracking-widest text-white/40">Current stage</div>
           <div className="font-mono text-sm text-white/80">{stage}</div>
         </div>
