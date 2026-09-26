@@ -12,6 +12,7 @@ This deliberately keeps the pipeline usable without a chat LLM — the docs forb
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from pathlib import Path
 from typing import Dict, List
@@ -24,7 +25,7 @@ from ..models.schemas import (
     SceneContext,
     Shot,
 )
-from ..services.vlm import describe_image, describe_scene_window
+from ..services.vlm import describe_scene_window
 
 
 def _transcript_for_range(
@@ -65,12 +66,27 @@ def build_scenes(
             )
         ]
 
-    # 0. Build bounded scene windows BEFORE per-shot work, so we can ask the
-    # provider to summarize a *window* (≤4 frames + transcript slice) rather
-    # than hammer it per-keyframe — this is the hybrid-fast path.
-    scene_windows: List[List[Path]] = _build_scene_windows(shots, keyframes, scenes_fallback=None)
+    # 0. Ask the active provider once per bounded window. The returned
+    # observation is reused for every shot in that window.
+    scene_windows: List[List[Path]] = _build_scene_windows(shots, keyframes)
+    window_observations: Dict[str, dict] = {}
+    transcript_blob = " ".join(s.text for s in asr_segments)[:1000]
+    for window in scene_windows[:8]:
+        observation = describe_scene_window(window, transcript_window=transcript_blob)
+        for frame_path in window:
+            window_observations[str(frame_path)] = observation
+    (job_dir / "vision_windows.json").write_text(
+        json.dumps({
+            "window_count": min(len(scene_windows), 8),
+            "windows": [
+                {"frames": [str(p) for p in w], "observation": window_observations.get(str(w[0]), {})}
+                for w in scene_windows[:8] if w
+            ],
+        }, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
-    # 1. Annotate shots with VLM-based observations (lazy — only keyframes near shot midpoint)
+    # 1. Annotate shots using the cached bounded-window observation.
     obs_per_shot: Dict[int, SceneContext] = {}
     for i, sh in enumerate(shots):
         # Find nearest keyframe within +/-2s of shot midpoint
@@ -83,16 +99,13 @@ def build_scenes(
                 nearest_dt = dt
                 nearest = kf
         if nearest and nearest_dt <= 5.0:
-            try:
-                d = describe_image(Path(nearest.path))
-            except Exception:
-                d = {
-                    "setting": "unknown",
-                    "activities": [],
-                    "objects": [],
-                    "emotion": "neutral",
-                    "context_tags": [],
-                }
+            d = window_observations.get(str(Path(nearest.path)), {
+                "setting": "unknown",
+                "activities": [],
+                "objects": [],
+                "emotion": "neutral",
+                "context_tags": [],
+            })
             ctx = SceneContext(
                 setting=d.get("setting", "unknown"),
                 activities=d.get("activities", []),

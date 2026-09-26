@@ -118,39 +118,6 @@ def run_job(job_id: str, video_path: Path, brand_path: Path, job_dir: Path,
         frames_dir = job_dir / "frames"
         keyframes = vision_mod.extract_keyframes_for(video_path, shots, frames_dir)
 
-        # === HYBRID FAST PATH ====================================================
-        # Build bounded scene windows (≤4 frames + transcript slice) and call the
-        # cloud vision provider once per window — NEVER the full video. The
-        # provider returns scene-understanding JSON; pacing/safety/brand
-        # decisions are still computed deterministically in Python.
-        # ========================================================================
-        try:
-            from ..services.vlm import describe_scene_window
-            import math
-            windows = scene_mod._build_scene_windows(shots, keyframes)
-            transcript_blob = " ".join(
-                seg.text or "" for seg in asr_segments
-            )
-            window_subs: List[str] = []
-            window_count = max(1, min(len(windows), 8))  # hard cap
-            for win in windows[:window_count]:
-                start_t = windows.index(win) * 0  # simplest
-                # cap payload
-                trimmed = transcript_blob[:1000]
-                obs = describe_scene_window(win, transcript_window=trimmed)
-                window_subs.append(", ".join((obs.get("context_tags") or [])[:5]))
-            win_summary_text = " | ".join(filter(None, window_subs))
-            (job_dir / "vision_windows.json").write_text(
-                json.dumps({
-                    "window_count": window_count,
-                    "tag_summaries": window_subs,
-                    "joined": win_summary_text,
-                }, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-        except Exception as exc:  # noqa: BLE001
-            log.warning("window-level vision skipped: %s", exc)
-
         # Stage: building scenes (multimodal fusion happens inside)
         update(70.0, "building_scenes")
         scenes: List[Scene] = scene_mod.build_scenes(

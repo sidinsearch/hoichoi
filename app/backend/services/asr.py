@@ -278,8 +278,8 @@ def _resolve_provider_name() -> str:
         return "groq"
     if _api_key("GEMINI_API_KEY") or _api_key("GOOGLE_API_KEY"):
         return "gemini"
-    if _api_key("ALLOW_LOCAL_ASR") or os.getenv("ALLOW_LOCAL_ASR") == "1":
-        return "faster_whisper"
+    if os.getenv("ALLOW_LOCAL_ASR", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return "faster_whisper"  # explicit opt-in only
     return "mock"  # safe default — never makes a network call
 
 
@@ -307,13 +307,35 @@ def get_provider(name: str | None = None) -> ASRProvider:
 
 def transcribe(audio_path: Path, language: str | None = None,
                provider_name: str | None = None) -> List[ASRSegment]:
-    """Public entry point. Routes through the active provider."""
+    """Public entry point with configured fallback on provider failure.
+
+    A transient Groq failure must not silently switch to local heavy inference.
+    The configured `ASR_FALLBACK_PROVIDER` wins; local faster-whisper is used
+    only when explicitly allowed.
+    """
     try:
         provider = get_provider(provider_name)
     except RuntimeError as exc:
-        log.warning("%s — falling back to mock provider", exc)
-        provider = get_provider("mock")
-    return provider.transcribe(audio_path, language=language)
+        log.warning("%s", exc)
+        provider = None
+
+    if provider is not None:
+        try:
+            return provider.transcribe(audio_path, language=language)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("ASR provider %s failed: %s", provider.name, exc)
+
+    fallback = os.getenv("ASR_FALLBACK_PROVIDER", "mock").strip().lower() or "mock"
+    if fallback == "faster_whisper" and os.getenv("ALLOW_LOCAL_ASR", "").lower() not in {"1", "true", "yes", "on"}:
+        log.warning("Ignoring faster_whisper fallback because ALLOW_LOCAL_ASR is false")
+        fallback = "mock"
+    if fallback == (provider.name if provider is not None else ""):
+        fallback = "mock"
+    try:
+        return get_provider(fallback).transcribe(audio_path, language=language)
+    except Exception as exc:  # noqa: BLE001
+        log.error("ASR fallback %s failed: %s", fallback, exc)
+        return []
 
 
 def reset_for_tests() -> None:

@@ -3,4 +3,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source app/backend/.venv/bin/activate
+if [[ -f .env ]]; then
+  set -a
+  source .env
+  set +a
+fi
 exec uvicorn app.backend.main:app --host 0.0.0.0 --port "${PORT:-8000}"
