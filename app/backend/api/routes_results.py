@@ -47,7 +47,7 @@ def job_status(job_id: str):
         ("transcript.json", "transcript"),
     ]:
         if (job_dir / fname).exists():
-            s.setdefault("artifacts", {})[key] = f"/api/jobs/{job_id}/{fname.replace('.json','').replace('vmap','vmap')}"
+            s.setdefault("artifacts", {})[key] = f"/api/jobs/{job_id}/vmap" if key == "vmap" else f"/api/jobs/{job_id}/{fname.removesuffix('.json')}"
     return s
 
 

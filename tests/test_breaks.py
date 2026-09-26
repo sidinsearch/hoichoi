@@ -36,6 +36,12 @@ def test_rejects_mid_sentence_and_dialogue():
     assert "dialogue_active" in cands[0].rejected_reasons
 
 
+def test_first_break_is_not_at_opening_frame():
+    c = _c(1, 10.0, scene_boundary=True, sentence=True, silence=1.5)
+    cands = break_mod.apply_hard_filters([c], video_duration_sec=600.0)
+    assert "too_early_first_break" in cands[0].rejected_reasons
+
+
 def test_minimum_gap_rejected():
     c1 = _c(1, 100.0, scene_boundary=True, sentence=True, silence=1.5)
     c2 = _c(2, 130.0, scene_boundary=True, sentence=True, silence=1.5)  # 30s after

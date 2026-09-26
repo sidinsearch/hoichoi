@@ -53,6 +53,7 @@ STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 @dataclass(frozen=True)
 class PacingConfig:
     min_gap_seconds: float = _env_float("MIN_GAP_SECONDS", 120.0)
+    min_first_break_seconds: float = _env_float("MIN_FIRST_BREAK_SECONDS", 60.0)
     max_breaks_per_hour: int = _env_int("MAX_BREAKS_PER_HOUR", 4)
     max_ad_load_percent: float = _env_float("MAX_AD_LOAD_PERCENT", 15.0)
     break_score_threshold: float = _env_float("BREAK_SCORE_THRESHOLD", 0.55)

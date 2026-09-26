@@ -162,6 +162,11 @@ def apply_hard_filters(
     for c in candidates:
         reasons: List[str] = []
 
+        # Do not place an ad immediately at the opening frame. The first
+        # meaningful break must have enough content before it.
+        if last_accepted_ts is None and c.timestamp_sec < cfg.min_first_break_seconds:
+            reasons.append("too_early_first_break")
+
         # Sentence safety
         if not c.signals.sentence_complete:
             reasons.append("sentence_incomplete")
