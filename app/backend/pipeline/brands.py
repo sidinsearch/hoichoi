@@ -198,8 +198,8 @@ def assign_brands(
         brand = next(b for b in brands if b.brand_id == top.brand_id)
         creative = _choose_creative(brand)
         summary = (
-            f"{sc.context.setting}; "
-            f"{', '.join(sc.context.activities[:3]) or 'no clear activity'}; "
+            f"{sc.context.setting if sc.context.setting != 'unknown' else 'Visual context unavailable'}; "
+            f"{', '.join(sc.context.activities[:3]) or 'No activity label available'}; "
             f"matched {brand.display_name} ({brand.category})"
         )
         assignments[c.candidate_id] = (brand, creative, summary)

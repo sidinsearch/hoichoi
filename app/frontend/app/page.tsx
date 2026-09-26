@@ -40,6 +40,7 @@ export default function Page() {
   const [breaks, setBreaks] = useState<BreakInfo[]>([]);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [scenes, setScenes] = useState<any[]>([]);
+  const [summary, setSummary] = useState<{ scenes: number; candidates: number; accepted: number; rejected: number } | undefined>();
   const [error, setError] = useState<string | null>(null);
   const [lastTriggeredBreak, setLastTriggeredBreak] = useState<BreakInfo | null>(null);
   const [language, setLanguage] = useState("bn");
@@ -47,7 +48,7 @@ export default function Page() {
   const [artifactsReady, setArtifactsReady] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const resetAnalysis = () => { setStatus("queued"); setStage("uploading"); setProgress(2); setBreaks([]); setError(null); setScenes([]); setVideoUrl(null); setArtifactsReady(false); };
+  const resetAnalysis = () => { setStatus("queued"); setStage("uploading"); setProgress(2); setBreaks([]); setError(null); setScenes([]); setSummary(undefined); setVideoUrl(null); setArtifactsReady(false); };
 
   const analyzeResource = async (resourceName: string, selectedLanguage = language) => {
     resetAnalysis();
@@ -102,6 +103,7 @@ export default function Page() {
         setStatus(s.status);
         setStage(s.stage);
         setProgress(s.progress ?? 0);
+        if (s.summary) setSummary(s.summary);
         if (s.status === "completed" || s.status === "failed") {
           if (s.status === "failed") setError(s.error || "Job failed");
           if (s.status === "completed") setArtifactsReady(true);
@@ -166,8 +168,8 @@ export default function Page() {
             </div>
             <div className="workspace-column workspace-results">
               <div className="panel-topline"><span className="panel-number">02 / RESULTS</span></div>
-              {isLoading && <ProgressPanel stages={STAGES} current={stage} />}
-              {jobId && !isLoading && <ResultsPanel status={status} stage={stage} progress={progress} summary={status === "completed" ? { scenes: scenes.length, candidates: breaks.length, accepted: breaks.length, rejected: 0 } : undefined} />}
+              {isLoading && <ProgressPanel stages={STAGES} current={stage} progress={progress} />}
+              {jobId && !isLoading && <ResultsPanel status={status} stage={stage} progress={progress} summary={status === "completed" ? summary : undefined} />}
               {error && <div className="card border border-rose/30 bg-rose/10 p-4 text-sm text-rose"><span className="font-semibold">Error:</span> {error}</div>}
               {status === "completed" && videoUrl && <><VideoPlayer src={videoUrl} breaks={breaks} onBreakTriggered={b => setLastTriggeredBreak(b)} /><BreakDetails breaks={breaks} scenes={scenes} /><TranscriptPanel scenes={scenes} breaks={breaks} /></>}
               {lastTriggeredBreak && <div className="card p-5"><div className="section-kicker">Now playing</div><div className="mt-1 text-lg font-semibold">{lastTriggeredBreak.display_name}</div><p className="mt-2 text-sm text-white/55">{lastTriggeredBreak.context_summary}</p></div>}

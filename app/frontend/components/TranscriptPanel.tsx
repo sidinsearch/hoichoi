@@ -7,7 +7,8 @@ type Props = { scenes: Scene[]; breaks: BreakInfo[] };
 
 function label(s: Scene) {
   const activities = s.context?.activities?.filter(Boolean)?.slice(0, 3) ?? [];
-  return activities.length ? activities.join(", ") : "No clear activity";
+  const setting = s.context?.setting && s.context.setting !== "unknown" ? s.context.setting : "Visual context unavailable";
+  return activities.length ? activities.join(", ") : setting;
 }
 
 export default function TranscriptPanel({ scenes }: Props) {

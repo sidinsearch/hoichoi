@@ -71,16 +71,18 @@ def build_scenes(
     scene_windows: List[List[Path]] = _build_scene_windows(shots, keyframes)
     window_observations: Dict[str, dict] = {}
     transcript_blob = " ".join(s.text for s in asr_segments)[:1000]
-    for window in scene_windows[:8]:
+    # Analyze every bounded window, not only the first eight. Each request is
+    # still capped at four frames and roughly one minute of content.
+    for window in scene_windows:
         observation = describe_scene_window(window, transcript_window=transcript_blob)
         for frame_path in window:
             window_observations[str(frame_path)] = observation
     (job_dir / "vision_windows.json").write_text(
         json.dumps({
-            "window_count": min(len(scene_windows), 8),
+            "window_count": len(scene_windows),
             "windows": [
                 {"frames": [str(p) for p in w], "observation": window_observations.get(str(w[0]), {})}
-                for w in scene_windows[:8] if w
+                for w in scene_windows if w
             ],
         }, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -142,7 +144,9 @@ def build_scenes(
         else:
             grouped.append(cur)
             cur = [sh.id]
-            prev_ctx = cur_ctx
+        # Compare the next shot to the immediately previous shot's context,
+        # not to the first shot in the entire scene.
+        prev_ctx = cur_ctx
     if cur:
         grouped.append(cur)
 

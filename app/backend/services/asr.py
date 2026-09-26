@@ -173,6 +173,13 @@ class GroqWhisperProvider:
         # Multipart body
         with open(audio_path, "rb") as fh:
             data = fh.read()
+        language_part = ""
+        if language and language != "auto":
+            language_part = (
+                f"--{boundary}\r\n"
+                "Content-Disposition: form-data; name=\"language\"\r\n\r\n"
+                f"{language}\r\n"
+            )
         body = (
             f"--{boundary}\r\n"
             "Content-Disposition: form-data; name=\"model\"\r\n\r\n"
@@ -180,6 +187,7 @@ class GroqWhisperProvider:
             f"--{boundary}\r\n"
             "Content-Disposition: form-data; name=\"response_format\"\r\n\r\n"
             "verbose_json\r\n"
+            f"{language_part}"
             f"--{boundary}\r\n"
             "Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n"
             "Content-Type: audio/wav\r\n\r\n"

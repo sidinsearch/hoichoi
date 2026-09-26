@@ -1,16 +1,30 @@
 "use client";
 
-type Props = { stages: string[]; current?: string };
+type Props = { stages: string[]; current?: string; progress?: number };
 
-export default function ProgressPanel({ stages, current }: Props) {
+const LABELS: Record<string, string> = {
+  uploading: "Preparing video",
+  extracting_audio: "Extracting audio",
+  transcribing_audio: "Transcribing audio",
+  detecting_shots: "Detecting scene cuts",
+  analyzing_visual_context: "Analyzing visual context",
+  building_scenes: "Building scenes",
+  finding_break_candidates: "Finding safe break candidates",
+  applying_safety_rules: "Applying safety rules",
+  matching_brands: "Matching brands",
+  generating_outputs: "Generating output files",
+  ready: "Completed",
+};
+
+export default function ProgressPanel({ stages, current, progress = 0 }: Props) {
   if (!current) return null;
   const idx = Math.max(0, stages.indexOf(current));
-  const pct = Math.round(((idx + 1) / stages.length) * 100);
+  const pct = Math.max(0, Math.min(100, Math.round(progress)));
   return (
     <div className="card p-6">
       <div className="mb-3 flex items-center justify-between text-xs text-white/50">
         <span className="uppercase tracking-widest">Pipeline stages</span>
-        <span className="font-mono text-white/70">{stages[idx] ?? "starting"}</span>
+        <span className="font-mono text-white/70">{LABELS[current] ?? current}</span>
       </div>
       <div className="mb-5 h-1.5 overflow-hidden rounded-full bg-white/5">
         <div
