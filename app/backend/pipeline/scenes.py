@@ -77,9 +77,17 @@ def build_scenes(
         observation = describe_scene_window(window, transcript_window=transcript_blob)
         for frame_path in window:
             window_observations[str(frame_path)] = observation
+    # If no provider could label the windows, every observation is the blank
+    # fallback. Record that once so the UI can say so honestly.
+    blank = sum(
+        1 for o in window_observations.values()
+        if o.get("setting") == "unknown" and not o.get("context_tags")
+    )
+    vision_degraded = bool(window_observations) and blank == len(window_observations)
     (job_dir / "vision_windows.json").write_text(
         json.dumps({
             "window_count": len(scene_windows),
+            "vision_degraded": vision_degraded,
             "windows": [
                 {"frames": [str(p) for p in w], "observation": window_observations.get(str(w[0]), {})}
                 for w in scene_windows if w

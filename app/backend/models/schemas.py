@@ -35,6 +35,7 @@ class ASRSegment(BaseModel):
     end: float
     text: str
     confidence: Optional[float] = None
+    text_en: Optional[str] = None
 
 
 class AudioSignals(BaseModel):

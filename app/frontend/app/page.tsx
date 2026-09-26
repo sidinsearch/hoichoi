@@ -41,6 +41,7 @@ export default function Page() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [scenes, setScenes] = useState<any[]>([]);
   const [summary, setSummary] = useState<{ scenes: number; candidates: number; accepted: number; rejected: number } | undefined>();
+  const [transcript, setTranscript] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [lastTriggeredBreak, setLastTriggeredBreak] = useState<BreakInfo | null>(null);
   const [language, setLanguage] = useState("bn");
@@ -48,7 +49,7 @@ export default function Page() {
   const [artifactsReady, setArtifactsReady] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const resetAnalysis = () => { setStatus("queued"); setStage("uploading"); setProgress(2); setBreaks([]); setError(null); setScenes([]); setSummary(undefined); setVideoUrl(null); setArtifactsReady(false); };
+  const resetAnalysis = () => { setStatus("queued"); setStage("uploading"); setProgress(2); setBreaks([]); setError(null); setScenes([]); setSummary(undefined); setTranscript([]); setVideoUrl(null); setArtifactsReady(false); };
 
   const analyzeResource = async (resourceName: string, selectedLanguage = language) => {
     resetAnalysis();
@@ -120,6 +121,8 @@ export default function Page() {
               const sd = await sc.json();
               setScenes(sd.scenes ?? []);
             }
+            const tr = await fetch(`/api/jobs/${id}/transcript`);
+            if (tr.ok) setTranscript(await tr.json());
           } catch {}
           return;
         }
@@ -171,7 +174,7 @@ export default function Page() {
               {isLoading && <ProgressPanel stages={STAGES} current={stage} progress={progress} />}
               {jobId && !isLoading && <ResultsPanel status={status} stage={stage} progress={progress} summary={status === "completed" ? summary : undefined} />}
               {error && <div className="card border border-rose/30 bg-rose/10 p-4 text-sm text-rose"><span className="font-semibold">Error:</span> {error}</div>}
-              {status === "completed" && videoUrl && <><VideoPlayer src={videoUrl} breaks={breaks} onBreakTriggered={b => setLastTriggeredBreak(b)} /><BreakDetails breaks={breaks} scenes={scenes} /><TranscriptPanel scenes={scenes} breaks={breaks} /></>}
+              {status === "completed" && videoUrl && <><VideoPlayer src={videoUrl} breaks={breaks} onBreakTriggered={b => setLastTriggeredBreak(b)} /><BreakDetails breaks={breaks} scenes={scenes} /><TranscriptPanel scenes={scenes} breaks={breaks} transcript={transcript} /></>}
               {lastTriggeredBreak && <div className="card p-5"><div className="section-kicker">Now playing</div><div className="mt-1 text-lg font-semibold">{lastTriggeredBreak.display_name}</div><p className="mt-2 text-sm text-white/55">{lastTriggeredBreak.context_summary}</p></div>}
               {artifactsReady && status === "completed" && <div id="artifacts" className="grid gap-3"><div className="section-kicker">Generated files</div><ArtifactCards artifacts={artifacts} /></div>}
             </div>

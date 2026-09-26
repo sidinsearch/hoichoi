@@ -21,6 +21,7 @@ from ..pipeline import brands as brand_mod
 from ..pipeline import breaks as break_mod
 from ..pipeline import outputs as out_mod
 from ..pipeline import scenes as scene_mod
+from ..services import translate as translate_mod
 from ..pipeline import shots as shot_mod
 from ..pipeline import vision as vision_mod
 from ..services.ffmpeg import extract_audio, probe_metadata
@@ -107,6 +108,8 @@ def run_job(job_id: str, video_path: Path, brand_path: Path, job_dir: Path,
         # Stage: language-agnostic transcription
         update(30.0, "transcribing_audio")
         audio_signals, asr_segments = audio_mod.compute_audio_signals(audio_path, language=language)
+        # English pass: keeps the original Bengali text and adds `text_en`.
+        translate_mod.translate_segments(asr_segments)
         (job_dir / "transcript.json").write_text(
             json.dumps([s.model_dump() for s in asr_segments], ensure_ascii=False, indent=2),
             encoding="utf-8",

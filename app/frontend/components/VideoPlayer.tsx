@@ -28,6 +28,7 @@ export default function VideoPlayer({ src, breaks, onBreakTriggered }: Props) {
   const adIdRef = useRef<string | null>(null);
   const adStartedAtRef = useRef<number | null>(null);
   const adResumeTimeRef = useRef<number | null>(null);
+  const lastTimeRef = useRef(0);
   const [, forceAdTick] = useState(0);
 
   useEffect(() => {
@@ -93,6 +94,14 @@ export default function VideoPlayer({ src, breaks, onBreakTriggered }: Props) {
     if (!v) return;
     setNow(v.currentTime);
     if (phase !== "playing") return;
+    // Scrubbing backwards re-arms breaks ahead of the playhead so the demo can
+    // be replayed without reloading the page.
+    if (v.currentTime < lastTimeRef.current - 1) {
+      for (const b of breaks) {
+        if (b.timestamp_sec > v.currentTime) consumed.current.delete(b.id);
+      }
+    }
+    lastTimeRef.current = v.currentTime;
     const next = nextPhase(v.currentTime, breaks, consumed.current, activeAd, remaining);
     if (next.kind === "ad") {
       setActiveAd(next.break);

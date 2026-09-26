@@ -75,7 +75,7 @@ class ProviderConfig:
     """
     # Vision
     vision_provider: str = os.getenv("VISION_PROVIDER", "").strip().lower()
-    vision_model: str = os.getenv("VISION_MODEL", "gemini-2.5-flash-lite")
+    vision_model: str = os.getenv("VISION_MODEL", "gemini-3.5-flash-lite")
     # ASR
     asr_provider: str = os.getenv("ASR_PROVIDER", "").strip().lower()
     asr_fallback_provider: str = os.getenv("ASR_FALLBACK_PROVIDER", "mock").strip().lower()
