@@ -191,7 +191,7 @@ class GeminiASRProvider:
     """Google Gemini multimodal fallback (audio / video understanding)."""
 
     name = "gemini"
-    DEFAULT_MODEL = "gemini-2.0-flash"
+    DEFAULT_MODEL = "gemini-3.8-flash"
 
     def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
         self._api_key = api_key or _api_key("GEMINI_API_KEY") or _api_key("GOOGLE_API_KEY")
